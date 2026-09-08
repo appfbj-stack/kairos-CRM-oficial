@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-ink-950 text-ink-100;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+  ::selection {
+    @apply bg-kairos-500/30 text-kairos-100;
+  }
+  /* Scrollbar dark theme */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-ink-950;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-ink-800 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-700;
+  }
+}
+
+@layer components {
+  /* ===== Buttons ===== */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-all duration-200 ease-out-expo focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-ink-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-kairos-500 text-ink-950 hover:bg-kairos-400 focus:ring-kairos-500 shadow-glow-sm hover:shadow-glow;
+  }
+  .btn-primary-lg {
+    @apply btn bg-kairos-500 text-ink-950 px-6 py-3 text-base hover:bg-kairos-400 focus:ring-kairos-500 shadow-glow-sm hover:shadow-glow;
+  }
+  .btn-secondary {
+    @apply btn bg-ink-800 text-ink-100 hover:bg-ink-700 focus:ring-ink-500 ring-1 ring-ink-700;
+  }
+  .btn-ghost {
+    @apply btn text-ink-300 hover:bg-ink-800/60 hover:text-ink-50 focus:ring-ink-500;
+  }
+  .btn-outline {
+    @apply btn border border-ink-700 bg-transparent text-ink-200 hover:bg-ink-900 hover:border-ink-600 focus:ring-ink-500;
+  }
+
+  /* ===== Inputs ===== */
+  .input {
+    @apply block w-full rounded-lg border-0 bg-ink-900/80 px-3.5 py-2.5 text-sm text-ink-50 placeholder:text-ink-500 ring-1 ring-inset ring-ink-800 transition focus:bg-ink-900 focus:ring-2 focus:ring-kairos-500 focus:outline-none disabled:opacity-50;
+  }
+  .input-lg {
+    @apply input px-4 py-3 text-base;
+  }
+  .label {
+    @apply block text-sm font-medium text-ink-300 mb-1.5;
+  }
+  .helper {
+    @apply mt-1.5 text-xs text-ink-500;
+  }
+
+  /* ===== Card ===== */
+  .card {
+    @apply rounded-2xl bg-ink-900/40 ring-1 ring-ink-800/80 backdrop-blur-sm;
+  }
+  .card-hover {
+    @apply card transition-all duration-300 hover:bg-ink-900/60 hover:ring-ink-700 hover:-translate-y-0.5;
+  }
+  .card-elevated {
+    @apply rounded-2xl bg-ink-900/80 ring-1 ring-ink-800 shadow-soft;
+  }
+
+  /* ===== Badge ===== */
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset;
+  }
+  .badge-kairos {
+    @apply badge bg-kairos-500/10 text-kairos-300 ring-kairos-500/20;
+  }
+  .badge-amber {
+    @apply badge bg-amber-500/10 text-amber-300 ring-amber-500/20;
+  }
+  .badge-ink {
+    @apply badge bg-ink-800/60 text-ink-300 ring-ink-700/60;
+  }
+
+  /* ===== Gradients / Effects ===== */
+  .text-gradient-kairos {
+    @apply bg-gradient-to-r from-kairos-300 via-kairos-400 to-emerald-300 bg-clip-text text-transparent;
+  }
+  .glow-border {
+    @apply ring-1 ring-kairos-500/30 shadow-glow-sm;
+  }
+  .surface-noise {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+
+  /* ===== Spinner ===== */
+  .spinner {
+    @apply h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent;
+  }
+}
+
+@layer utilities {
+  .mask-fade-b {
+    -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+    mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+  }
+  .mask-radial {
+    -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 50%, transparent 100%);
+    mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 50%, transparent 100%);
+  }
+}

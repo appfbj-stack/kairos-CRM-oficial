@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Prisma
+packages/database/prisma/migrations/dev.db*
+*.db
+*.db-journal
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# OS
+desktop.ini
+$RECYCLE.BIN/
+
+# Docker volumes (kept locally)
+.docker-data/
+
+# Seeds temporários
+*.seed.json
