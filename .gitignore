@@ -1,0 +1,48 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# next.js
+apps/web/.next/
+apps/web/out/
+apps/web/build/
+
+# api
+apps/api/dist/
+
+# turbo
+.turbo/
+
+# env files
+.env
+.env.local
+.env.production
+*.env
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# os
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/
+*.swp
+
+# backups
+*.bak
+*.tar.gz
+*.tar
+*.zip
+
+# temp
+tmp/
+temp/
+
+# migrations err
+migration.err

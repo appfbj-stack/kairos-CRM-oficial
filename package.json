@@ -1,0 +1,31 @@
+{
+  "name": "kairos-crm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kairos CRM — SaaS multi-tenant com Hermes central, WhatsApp, RAG e automações",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:tenant-isolation": "pnpm --filter @kairos-crm/api test:tenant-isolation",
+    "db:generate": "pnpm --filter @kairos-crm/database prisma generate",
+    "db:migrate": "pnpm --filter @kairos-crm/database prisma migrate dev",
+    "db:migrate:deploy": "pnpm --filter @kairos-crm/database prisma migrate deploy",
+    "db:seed": "pnpm --filter @kairos-crm/database seed",
+    "db:studio": "pnpm --filter @kairos-crm/database prisma studio",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@10.22.0"
+}

@@ -1,0 +1,31 @@
+name: kairos-crm
+
+# =====================================================
+# Stack local de desenvolvimento
+# Banco Postgres dedicado, isolado dos outros Kairós.
+# Porta 5433 (host) -> 5432 (container) para não
+# conflitar com nada.
+# =====================================================
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: kairos-crm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kairos_crm
+      POSTGRES_PASSWORD: kairos_crm_secret
+      POSTGRES_DB: kairos_crm_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - kairos_crm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kairos_crm -d kairos_crm_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  kairos_crm_pgdata:
+    driver: local

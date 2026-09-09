@@ -1,0 +1,795 @@
+// =====================================================================
+// Kairos CRM — Schema Prisma
+// Banco dedicado: kairos_crm_db (PostgreSQL 15)
+// Multi-tenant via tenantId em todas as tabelas de negócio.
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================
+// ENUMS
+// =====================================================================
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+  TRIAL
+}
+
+enum TenantPlan {
+  FREE
+  BASIC
+  PRO
+  PREMIUM
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  MANAGER
+  AGENT
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  SUSPENDED
+}
+
+// ============ CRM (Fase 2) ============
+
+enum LeadStatus {
+  OPEN
+  WON
+  LOST
+}
+
+enum LeadTemperature {
+  COLD
+  WARM
+  HOT
+}
+
+enum TaskStatus {
+  TODO
+  DOING
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ProductType {
+  PRODUCT
+  SERVICE
+}
+
+// ============ WhatsApp (Fase 3) ============
+
+enum WhatsAppProvider {
+  EVOLUTION
+  UAZAPI
+  OFFICIAL
+}
+
+enum WhatsAppStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  ERROR
+}
+
+enum ConversationStatus {
+  OPEN
+  WITH_HUMAN
+  WITH_AI
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  LOCATION
+  CONTACT
+}
+
+enum SenderType {
+  CONTACT
+  USER
+  AI
+  SYSTEM
+}
+
+// ============ Hermes (Fase 4) ============
+
+enum LLMProvider {
+  OPENAI
+  GEMINI
+  CLAUDE
+  DEEPSEEK
+  GLM
+  OLLAMA
+  OPENROUTER
+}
+
+enum FollowUpStatus {
+  SCHEDULED
+  SENT
+  CANCELLED
+  FAILED
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  DONE
+  CANCELLED
+  NO_SHOW
+}
+
+// =====================================================================
+// FASE 1 — FUNDAÇÃO
+// =====================================================================
+
+model Tenant {
+  id           String       @id @default(uuid())
+  name         String
+  slug         String       @unique
+  email        String
+  phone        String?
+  document     String?
+  logoUrl      String?
+  primaryColor String?      @default("#10b981")
+  plan         TenantPlan   @default(FREE)
+  status       TenantStatus @default(TRIAL)
+  trialEndsAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  deletedAt    DateTime?
+
+  users         User[]
+  auditLogs     AuditLog[]
+  accessTickets AccessTicket[]
+  notifications Notification[]
+
+  // Fase 2
+  contacts      Contact[]
+  companies     Company[]
+  leads         Lead[]
+  pipelines     Pipeline[]
+  tasks         Task[]
+  products      Product[]
+  services      Service[]
+
+  // Fase 3
+  whatsappAccounts  WhatsAppAccount[]
+  conversations     Conversation[]
+
+  // Fase 4
+  aiConfig          AIConfig?
+  aiMessages        AIMessage[]
+
+  // Fase 5
+  knowledgeEntries  CompanyKnowledge[]
+
+  // Fase 6
+  followups         FollowUp[]
+  appointments      Appointment[]
+  automations       Automation[]
+
+  @@index([status])
+  @@index([plan])
+  @@map("tenants")
+}
+
+model User {
+  id            String     @id @default(uuid())
+  tenantId      String?
+  email         String
+  passwordHash  String
+  name          String
+  role          UserRole   @default(USER)
+  status        UserStatus @default(ACTIVE)
+  avatarUrl     String?
+  phone         String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  tenant        Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+  superAdminActions SuperAdminAction[] @relation("SuperAdminActions")
+  notifications Notification[]
+
+  // Fase 2
+  assignedLeads Lead[]    @relation("LeadAssignedUser")
+  assignedTasks Task[]    @relation("TaskAssignedUser")
+  followups     FollowUp[] @relation("FollowUpAssignedUser")
+  appointments  Appointment[] @relation("AppointmentAssignedUser")
+  sentMessages  Message[]  @relation("MessageSender")
+
+  // Fase 3
+  conversations Conversation[] @relation("ConversationAssignedUser")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  ipAddress String?
+  userAgent String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  userId     String?
+  action     String
+  resource   String?
+  resourceId String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// =====================================================================
+// FASE 2 — CRM CORE
+// =====================================================================
+
+model Contact {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  phone     String?
+  email     String?
+  companyId String?
+  tags      String[] @default([])
+  notes     String?
+  source    String?  // "whatsapp", "form", "import", "manual"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company        Company?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  leads          Lead[]
+  conversations  Conversation[]
+  appointments   Appointment[]
+  tasks          Task[]
+  followups      FollowUp[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@index([tenantId, email])
+  @@index([tenantId, name])
+  @@map("contacts")
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  document  String?
+  industry  String?
+  size      String?
+  website   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contacts Contact[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("companies")
+}
+
+model Pipeline {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stages  PipelineStage[]
+  leads   Lead[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("pipelines")
+}
+
+model PipelineStage {
+  id         String   @id @default(uuid())
+  pipelineId String
+  name       String
+  position   Int
+  color      String?  @default("#10b981")
+  isWon      Boolean  @default(false)
+  isLost     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  leads    Lead[]
+
+  @@unique([pipelineId, position])
+  @@index([pipelineId])
+  @@map("pipeline_stages")
+}
+
+model Lead {
+  id              String          @id @default(uuid())
+  tenantId        String
+  contactId       String
+  pipelineId      String
+  stageId         String
+  assignedUserId  String?
+  title           String
+  valueCents      Int?            // em centavos
+  status          LeadStatus      @default(OPEN)
+  temperature     LeadTemperature @default(COLD)
+  interest        String?         // interesse identificado pela IA
+  origin          String?         // origem: "whatsapp", "instagram", "site"
+  intention       String?         // intenção: "buy", "info", "schedule", "complaint"
+  aiHandled       Boolean         @default(false) // foi classificado/movido pela IA?
+  lostReason      String?
+  wonAt           DateTime?
+  lostAt          DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact      Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  pipeline     Pipeline      @relation(fields: [pipelineId], references: [id])
+  stage        PipelineStage @relation(fields: [stageId], references: [id])
+  assignedUser User?         @relation("LeadAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  tasks       Task[]
+  followups   FollowUp[]
+  conversations Conversation[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, stageId])
+  @@index([tenantId, temperature])
+  @@index([assignedUserId])
+  @@map("leads")
+}
+
+model Task {
+  id              String       @id @default(uuid())
+  tenantId        String
+  assignedUserId  String?
+  leadId          String?
+  contactId       String?
+  conversationId  String?
+  title           String
+  description     String?
+  dueDate         DateTime?
+  status          TaskStatus   @default(TODO)
+  priority        TaskPriority @default(MEDIUM)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  completedAt     DateTime?
+  deletedAt       DateTime?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedUser User?         @relation("TaskAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([assignedUserId, status])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+model Product {
+  id          String      @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  priceCents  Int
+  category    String?
+  imageUrl    String?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId, active])
+  @@map("products")
+}
+
+model Service {
+  id              String   @id @default(uuid())
+  tenantId        String
+  name            String
+  description     String?
+  durationMinutes Int      @default(60)
+  priceCents      Int
+  category        String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, active])
+  @@map("services")
+}
+
+// =====================================================================
+// FASE 3 — WHATSAPP
+// =====================================================================
+
+model WhatsAppAccount {
+  id           String          @id @default(uuid())
+  tenantId     String
+  name         String          // nome amigável ("WhatsApp Vendas")
+  provider     WhatsAppProvider @default(EVOLUTION)
+  instanceId   String          // ID na Evolution
+  phone        String?         // número conectado
+  status       WhatsAppStatus  @default(DISCONNECTED)
+  apiKey       String?         // chave de API do provider (criptografada)
+  webhookUrl   String?
+  config       Json?           // config específica do provider
+  lastSyncAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  deletedAt    DateTime?
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@unique([provider, instanceId])
+  @@index([tenantId, status])
+  @@map("whatsapp_accounts")
+}
+
+model Conversation {
+  id               String              @id @default(uuid())
+  tenantId         String
+  whatsappAccountId String
+  contactId        String
+  leadId           String?
+  assignedUserId   String?             // humano responsável (se WITH_HUMAN)
+  status           ConversationStatus  @default(WITH_AI)
+  aiPaused         Boolean             @default(false)
+  aiPausedReason   String?             // "user_request", "agent_takeover", "error"
+  lastMessageAt    DateTime?
+  lastMessagePreview String?
+  unreadCount      Int                 @default(0)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  closedAt         DateTime?
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsAppAccount  @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  contact         Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  lead            Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  assignedUser    User?            @relation("ConversationAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  messages        Message[]
+  tasks           Task[]
+
+  @@unique([whatsappAccountId, contactId])
+  @@index([tenantId, status])
+  @@index([tenantId, lastMessageAt])
+  @@index([assignedUserId, status])
+  @@map("conversations")
+}
+
+model Message {
+  id              String          @id @default(uuid())
+  tenantId        String
+  conversationId  String
+  senderType      SenderType      // CONTACT, USER, AI, SYSTEM
+  senderUserId    String?         // se for USER
+  direction       MessageDirection
+  type            MessageType     @default(TEXT)
+  content         String?         // texto
+  mediaUrl        String?         // url do media
+  externalId      String?         // ID do provider (pra deduplicação)
+  aiMetadata      Json?           // se gerado por IA: tokens, tool calls, etc
+  createdAt       DateTime        @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderUser   User?        @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([externalId])
+  @@map("messages")
+}
+
+// =====================================================================
+// FASE 4 — HERMES (IA NATIVA)
+// =====================================================================
+
+model AIConfig {
+  id                  String      @id @default(uuid())
+  tenantId            String      @unique
+  provider            LLMProvider @default(OPENAI)
+  model               String      @default("gpt-4o-mini")
+  apiKey              String?     // criptografada
+  assistantName       String      @default("Kairos IA")
+  personality         String?     // "amigável e profissional"
+  objectives          String[]    @default([]) // ["atender", "agendar", "qualificar"]
+  transferToHumanOn   String[]    @default([]) // ["palavra-chave", "reclamação", "pagamento"]
+  businessHours       Json?       // { start: "08:00", end: "18:00", days: [1,2,3,4,5] }
+  systemPrompt        String?     // override do prompt padrão
+  temperature        Float       @default(0.7)
+  enabled             Boolean     @default(true)
+  autoReply           Boolean     @default(true)
+  monthlyLimit        Int?        // limite de mensagens IA por mês
+  monthlyUsed         Int         @default(0)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages AIMessage[]
+
+  @@map("ai_configs")
+}
+
+model AIMessage {
+  id             String   @id @default(uuid())
+  tenantId       String
+  configId       String
+  conversationId String?
+  userMessage    String
+  aiResponse     String?
+  toolCalls      Json?    // [{ tool, params, result }]
+  tokensIn       Int?
+  tokensOut      Int?
+  latencyMs      Int?
+  error          String?
+  createdAt      DateTime @default(now())
+
+  config AIConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([conversationId])
+  @@map("ai_messages")
+}
+
+// =====================================================================
+// FASE 5 — CONHECIMENTO
+// =====================================================================
+
+model CompanyKnowledge {
+  id        String   @id @default(uuid())
+  tenantId  String
+  question  String   // "Qual o horário de funcionamento?"
+  answer    String   // "Seg-Sex 9h-18h, Sáb 9h-13h"
+  category  String?  // "horário", "política", "produto"
+  source    String?  // "manual", "pdf", "url"
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, active])
+  @@index([tenantId, category])
+  // Full-text search no Postgres (Fase 5)
+  // @@index([question(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("company_knowledge")
+}
+
+// =====================================================================
+// FASE 6 — AUTOMAÇÕES
+// =====================================================================
+
+model FollowUp {
+  id              String          @id @default(uuid())
+  tenantId        String
+  contactId       String?
+  leadId          String?
+  assignedUserId  String?
+  messageTemplate String          // template da mensagem
+  scheduledAt     DateTime
+  status          FollowUpStatus  @default(SCHEDULED)
+  attempts        Int             @default(0)
+  sentAt          DateTime?
+  failedReason    String?
+  conversationId  String?         // conversa onde vai enviar
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  tenant       Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact      Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  lead         Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  assignedUser User?   @relation("FollowUpAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([scheduledAt, status])
+  @@map("followups")
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  tenantId        String
+  contactId       String
+  serviceId       String?
+  assignedUserId  String?
+  startTime       DateTime
+  endTime         DateTime
+  status          AppointmentStatus @default(SCHEDULED)
+  notes           String?
+  source          String?           // "hermes", "manual", "import"
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  cancelledAt     DateTime?
+  cancellationReason String?
+
+  tenant       Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact      Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  service      Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  assignedUser User?   @relation("AppointmentAssignedUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, startTime])
+  @@index([assignedUserId, startTime])
+  @@index([status, startTime])
+  @@map("appointments")
+}
+
+model Automation {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String              // "Novo lead → Hermes atende"
+  trigger     String              // "lead_created", "message_received", "no_response_24h", "appointment_created"
+  conditions  Json?               // condições adicionais
+  actions     Json                // [{ type: "send_whatsapp", ... }, { type: "create_task", ... }]
+  active      Boolean  @default(true)
+  isTemplate  Boolean  @default(false) // é um template do sistema?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, active])
+  @@index([trigger, active])
+  @@map("automations")
+}
+
+// =====================================================================
+// FASE 8 — LGPD: PAINEL OPERACIONAL SUPER ADMIN
+// Sem acesso direto a dados do cliente. Só métricas + ações com log.
+// =====================================================================
+
+/// Ticket de acesso a dados (LGPD Art. 37, 38).
+/// Super admin SÓ pode ler dados de tenant com ticket aberto,
+/// autorizado por escrito, com prazo de expiração, e tudo é logado.
+model AccessTicket {
+  id            String   @id @default(uuid())
+  tenantId      String
+  openedBy      String   // super admin userId
+  authorizedBy  String?  // email de quem autorizou (cliente, DPO, etc)
+  reason        String   // motivo do acesso
+  scope         String   // 'leads' | 'conversations' | 'contacts' | 'messages' | 'all'
+  status        String   @default("OPEN") // OPEN | EXPIRED | REVOKED
+  expiresAt     DateTime // data de expiração (max 7 dias)
+  accessedData  Json?    // resumo do que foi acessado (counts, não conteúdo)
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+  closedAt      DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([openedBy, createdAt])
+  @@index([expiresAt])
+  @@map("access_tickets")
+}
+
+/// Log de ações administrativas do Super Admin (separado do AuditLog por
+/// questões de compliance — retido 5 anos conforme LGPD Art. 16).
+model SuperAdminAction {
+  id          String   @id @default(uuid())
+  superAdminId String
+  tenantId    String?
+  action      String   // 'TENANT_DISABLE' | 'TENANT_ENABLE' | 'TENANT_CHANGE_PLAN' | 'PASSWORD_RESET' | 'ACCESS_TICKET_OPEN' | 'ACCESS_TICKET_CLOSE'
+  target      String?  // userId, tenantId, etc
+  metadata    Json?    // { oldPlan, newPlan, ip, userAgent, etc }
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  superAdmin User @relation("SuperAdminActions", fields: [superAdminId], references: [id], onDelete: Cascade)
+
+  @@index([superAdminId, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([action])
+  @@map("super_admin_actions")
+}
+
+// =====================================================================
+// NOTIFICAÇÕES IN-APP
+// =====================================================================
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String   // destinatário
+  type      String   // 'NEW_LEAD' | 'NEW_CONVERSATION' | 'NEW_MESSAGE' | 'TASK_ASSIGNED' | 'FOLLOWUP_DUE' | 'AUTOMATION_RUN' | 'CONVERSATION_TAKEOVER' | 'CONVERSATION_CLOSED' | 'MENTION'
+  title     String
+  body      String?
+  link      String?  // URL interna pra navegar ao clicar (ex: /inbox/:id)
+  icon      String?  // nome do ícone lucide
+  metadata  Json?    // dados extras (leadId, conversationId, etc)
+  read      Boolean  @default(false)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([type])
+  @@map("notifications")
+}
