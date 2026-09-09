@@ -15,11 +15,13 @@ const navItems: NavItem[] = [
   { href: '/products', label: 'Produtos', iconKey: 'products' },
   { href: '/services', label: 'Serviços', iconKey: 'services' },
   { href: '/inbox', label: 'Conversas', iconKey: 'conversations' },
+  { href: '/settings/whatsapp', label: 'WhatsApp', iconKey: 'whatsapp' },
   { href: '/knowledge', label: 'Conhecimento', iconKey: 'knowledge' },
   { href: '/hermes', label: 'Kairos IA', iconKey: 'hermes' },
   { href: '/pipelines', label: 'Funis', iconKey: 'pipelines', soon: true },
   { href: '/automations', label: 'Automações', iconKey: 'automations' },
   { href: '/settings', label: 'Configurações', iconKey: 'settings' },
+  { href: '/super-admin', label: 'Painel Operacional', iconKey: 'shield', superAdminOnly: true },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -49,7 +51,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             Navegação
           </div>
           <nav className="space-y-0.5">
-            <SidebarNav items={navItems} />
+            <SidebarNav items={navItems} userRole={me.role} />
           </nav>
         </div>
 
