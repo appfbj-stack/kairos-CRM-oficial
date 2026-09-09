@@ -59,14 +59,14 @@ export async function setAuthCookies(tokens: { accessToken: string; refreshToken
   c.set(ACCESS_COOKIE, tokens.accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: 60 * 15, // 15min
   });
   c.set(REFRESH_COOKIE, tokens.refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: 60 * 60 * 24 * 7, // 7d
   });

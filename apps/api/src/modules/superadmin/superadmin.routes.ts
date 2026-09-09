@@ -201,6 +201,117 @@ export async function superAdminRoutes(app: FastifyInstance) {
       } catch (err) { return sendError(reply, err); }
     });
 
+    // === BILLING ===
+
+    subApp.get('/api/superadmin/billing', async (req, reply) => {
+      try {
+        const user = (req as any).user as AuthenticatedUser;
+        const meta = getRequestMeta(req);
+        const tenants = await prisma.tenant.findMany({
+          where: { deletedAt: null },
+          orderBy: { paymentDueDate: { sort: 'asc', nulls: 'last' } },
+          select: {
+            id: true, name: true, slug: true, email: true, plan: true, status: true,
+            paymentDueDate: true, lastPaymentAt: true, monthlyAmount: true,
+          },
+        });
+
+        const now = new Date();
+        const enriched = tenants.map((t) => {
+          const due = t.paymentDueDate;
+          const overdueDays = due ? Math.max(0, Math.floor((now.getTime() - due.getTime()) / 86400000)) : 0;
+          const isOverdue = due ? due < now : false;
+          return {
+            ...t,
+            monthlyAmount: t.monthlyAmount ? Number(t.monthlyAmount) : null,
+            overdueDays,
+            isOverdue,
+            blocked: t.status === 'BLOCKED',
+          };
+        });
+
+        const summary = {
+          totalTenants: enriched.length,
+          active: enriched.filter((t) => t.status === 'ACTIVE' || t.status === 'TRIAL').length,
+          overdue: enriched.filter((t) => t.isOverdue && t.status !== 'BLOCKED').length,
+          blocked: enriched.filter((t) => t.status === 'BLOCKED').length,
+          monthlyRevenue: enriched
+            .filter((t) => t.status === 'ACTIVE')
+            .reduce((acc, t) => acc + (t.monthlyAmount || 0), 0),
+          overdueAmount: enriched
+            .filter((t) => t.isOverdue && t.status !== 'BLOCKED')
+            .reduce((acc, t) => acc + (t.monthlyAmount || 0), 0),
+        };
+
+        await logAction({
+          superAdminId: user.id, action: 'BILLING_VIEW',
+          metadata: { tenants: enriched.length, overdue: summary.overdue }, ...meta,
+        });
+
+        return reply.send({ tenants: enriched, summary });
+      } catch (err) { return sendError(reply, err); }
+    });
+
+    subApp.post<{ Params: { id: string } }>('/api/superadmin/tenants/:id/block-payment', async (req, reply) => {
+      try {
+        const user = (req as any).user as AuthenticatedUser;
+        const meta = getRequestMeta(req);
+        const { id } = req.params;
+
+        const before = await prisma.tenant.findUnique({ where: { id } });
+        if (!before) throw AppError.notFound('Tenant');
+
+        const t = await prisma.tenant.update({
+          where: { id },
+          data: { status: 'BLOCKED' },
+        });
+        await logAction({
+          superAdminId: user.id, tenantId: id,
+          action: 'TENANT_BLOCK_PAYMENT', target: id,
+          metadata: { reason: 'inadimplência', overdueDays: (req.body as any)?.overdueDays || 0 },
+          ...meta,
+        });
+        logger.warn({ tenantId: id, superAdmin: user.email }, 'TENANT BLOCKED — INADIMPLÊNCIA');
+        return reply.send({ ok: true, status: t.status });
+      } catch (err) { return sendError(reply, err); }
+    });
+
+    const unblockSchema = z.object({
+      nextDueDate: z.string().optional(),
+      monthlyAmount: z.number().optional(),
+    });
+
+    subApp.post<{ Params: { id: string } }>('/api/superadmin/tenants/:id/unblock-payment', async (req, reply) => {
+      try {
+        const user = (req as any).user as AuthenticatedUser;
+        const meta = getRequestMeta(req);
+        const { id } = req.params;
+        const body = unblockSchema.parse(req.body || {});
+
+        const t = await prisma.tenant.update({
+          where: { id },
+          data: {
+            status: 'ACTIVE',
+            lastPaymentAt: new Date(),
+            ...(body.nextDueDate ? { paymentDueDate: new Date(body.nextDueDate) } : {}),
+            ...(body.monthlyAmount !== undefined ? { monthlyAmount: body.monthlyAmount } : {}),
+          },
+        });
+        await logAction({
+          superAdminId: user.id, tenantId: id,
+          action: 'TENANT_UNBLOCK_PAYMENT', target: id,
+          metadata: { nextDueDate: body.nextDueDate, monthlyAmount: body.monthlyAmount },
+          ...meta,
+        });
+        return reply.send({
+          ok: true,
+          status: t.status,
+          paymentDueDate: t.paymentDueDate,
+          lastPaymentAt: t.lastPaymentAt,
+        });
+      } catch (err) { return sendError(reply, err); }
+    });
+
     // === AÇÕES ADMINISTRATIVAS (todas com log) ===
 
     subApp.post<{ Params: { id: string } }>('/api/superadmin/tenants/:id/disable', async (req, reply) => {

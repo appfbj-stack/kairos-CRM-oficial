@@ -36,8 +36,8 @@ export default function LoginPage() {
       // e também em localStorage (fallback pro client-side fetch)
       const maxAge = 60 * 60 * 24 * 7; // 7 dias
       const secure = window.location.protocol === 'https:';
-      document.cookie = `kcrm_access=${res.accessToken}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure ? '; Secure' : ''}`;
-      document.cookie = `kcrm_refresh=${res.refreshToken}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure ? '; Secure' : ''}`;
+      document.cookie = `kcrm_access=${res.accessToken}; Path=/; Max-Age=${maxAge}; SameSite=Strict${secure ? '; Secure' : ''}`;
+      document.cookie = `kcrm_refresh=${res.refreshToken}; Path=/; Max-Age=${maxAge}; SameSite=Strict${secure ? '; Secure' : ''}`;
       localStorage.setItem('kcrm_access', res.accessToken);
       localStorage.setItem('kcrm_refresh', res.refreshToken);
 

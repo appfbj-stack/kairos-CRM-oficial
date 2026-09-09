@@ -49,8 +49,8 @@ export default function RegisterPage() {
       });
       const maxAge = 60 * 60 * 24 * 7;
       const secure = window.location.protocol === 'https:';
-      document.cookie = `kcrm_access=${res.accessToken}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure ? '; Secure' : ''}`;
-      document.cookie = `kcrm_refresh=${res.refreshToken}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure ? '; Secure' : ''}`;
+      document.cookie = `kcrm_access=${res.accessToken}; Path=/; Max-Age=${maxAge}; SameSite=Strict${secure ? '; Secure' : ''}`;
+      document.cookie = `kcrm_refresh=${res.refreshToken}; Path=/; Max-Age=${maxAge}; SameSite=Strict${secure ? '; Secure' : ''}`;
       localStorage.setItem('kcrm_access', res.accessToken);
       localStorage.setItem('kcrm_refresh', res.refreshToken);
       router.push('/dashboard');

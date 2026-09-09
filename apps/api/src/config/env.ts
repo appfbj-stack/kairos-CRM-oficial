@@ -20,6 +20,7 @@ const envSchema = z.object({
   EVOLUTION_BASE_URL: z.string().default('http://evogo-api:8080'),
   EVOLUTION_API_KEY: z.string().default('kairos-evolution-key'),
   EVOLUTION_WEBHOOK_URL: z.string().optional(),
+  EVOLUTION_WEBHOOK_SECRET: z.string().optional(), // se setado, exige HMAC SHA256 no header
 });
 
 const parsed = envSchema.safeParse(process.env);

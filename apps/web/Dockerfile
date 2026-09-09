@@ -11,8 +11,9 @@ RUN corepack enable
 # Copia tudo (workspace + lockfile)
 COPY . .
 
+ENV CI=true
 # Instala deps
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Builda shared (necessário p/ web usar @kairos-crm/shared)
 RUN pnpm --filter @kairos-crm/shared build

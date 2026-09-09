@@ -20,6 +20,9 @@ import { hermesRoutes } from './modules/hermes/hermes.routes';
 import { knowledgeRoutes } from './modules/knowledge/knowledge.routes';
 import { automationsRoutes } from './modules/automations/automations.routes';
 import { auditRoutes } from './modules/audit/audit.routes';
+import { superAdminRoutes } from './modules/superadmin/superadmin.routes';
+import { notificationRoutes } from './modules/notifications/notifications.routes';
+import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 
 async function buildServer() {
   const app = Fastify({
@@ -36,11 +39,50 @@ async function buildServer() {
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   });
 
-  // Helmet (segurança de headers)
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // Helmet (segurança de headers) — CSP estrita + HSTS
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Next.js precisa
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'", 'https://crm.fbautomacao.space'],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    crossOriginEmbedderPolicy: false,
+  });
+
+  // Rate limit GLOBAL (defesa em profundidade) — 300 req/min por IP
+  await app.register(import('@fastify/rate-limit'), {
+    max: 300,
+    timeWindow: '1 minute',
+    cache: 10000,
+    allowList: ['127.0.0.1', '172.16.0.0/12'], // dokploy-network interno
+  });
 
   // Erros sensíveis do @fastify/sensible
   await app.register(sensible);
+
+  // Preserva raw body pra validação HMAC do webhook WhatsApp
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    try {
+      const raw = body as string;
+      (req as any).rawBody = raw;
+      done(null, raw ? JSON.parse(raw) : {});
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
 
   // Health
   await app.register(healthRoutes);
@@ -96,6 +138,15 @@ async function buildServer() {
 
   // /api/audit (audit log do tenant)
   await auditRoutes(app);
+
+  // /api/dashboard (KPIs para o dashboard)
+  await dashboardRoutes(app);
+
+  // /api/superadmin/* (painel operacional LGPD-compliant)
+  await superAdminRoutes(app);
+
+  // /api/notifications (sino + lista)
+  await notificationRoutes(app);
 
   // 404
   app.setNotFoundHandler((req, reply) => {

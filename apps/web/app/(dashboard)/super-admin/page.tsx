@@ -8,7 +8,7 @@
 
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Shield, Building2, Users, MessageSquare, BarChart3, AlertTriangle, FileText, Lock } from 'lucide-react';
+import { Shield, Building2, Users, MessageSquare, BarChart3, AlertTriangle, FileText, Lock, CreditCard } from 'lucide-react';
 import { getAccessToken } from '@/lib/auth';
 import { apiFetch, ApiClientError } from '@/lib/api';
 
@@ -134,6 +134,9 @@ export default async function SuperAdminPage() {
       <div className="flex flex-wrap gap-2">
         <Link href="/super-admin/access-tickets" className="btn-ghost text-sm">
           <FileText className="h-4 w-4" /> Access Tickets ({activeAccessTickets})
+        </Link>
+        <Link href="/super-admin/billing" className="btn-ghost text-sm">
+          <CreditCard className="h-4 w-4" /> Cobrança
         </Link>
         <Link href="/super-admin/audit" className="btn-ghost text-sm">
           <FileText className="h-4 w-4" /> Audit Log

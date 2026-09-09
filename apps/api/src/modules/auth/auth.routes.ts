@@ -23,16 +23,28 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  // POST /api/auth/login
-  app.post('/login', async (req, reply) => {
-    try {
-      const input = loginSchema.parse(req.body);
-      const result = await authService.login(input);
-      return reply.send(result);
-    } catch (err) {
-      return sendError(reply, err);
-    }
-  });
+  // POST /api/auth/login — rate limit agressivo (5 tentativas / 15min por IP)
+  app.post(
+    '/login',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '15 minutes',
+          ban: 3, // após 3 bloqueios, bane por 1h
+        },
+      },
+    },
+    async (req, reply) => {
+      try {
+        const input = loginSchema.parse(req.body);
+        const result = await authService.login(input);
+        return reply.send(result);
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
 
   // POST /api/auth/refresh
   app.post('/refresh', async (req, reply) => {

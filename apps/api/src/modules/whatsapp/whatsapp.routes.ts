@@ -1,10 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { createHmac } from 'crypto';
 import { authenticate } from '../../middleware/auth';
 import { injectTenantContext } from '../../middleware/tenant';
 import { requireRole } from '../../middleware/permissions';
 import { sendError } from '../../lib/errors';
 import { logger } from '../../lib/logger';
+import { env } from '../../config/env';
 import {
   createAccountSchema,
   listConversationsQuerySchema,
@@ -15,9 +17,31 @@ import * as accounts from './whatsapp.service';
 import * as conversations from './conversations.service';
 
 export async function whatsappRoutes(app: FastifyInstance) {
-  // ===== Webhook (sem auth) — registra primeiro, antes do addHook =====
+  // ===== Webhook (com HMAC signature) — registra primeiro, antes do addHook =====
   app.post('/api/whatsapp/webhook', async (req, reply) => {
     try {
+      // Validação de assinatura: Evolution Go envia header `webhookSignature`
+      // se EVOLUTION_AUTHENTICATION_WEBHOOK=true e EVOLUTION_WEBHOOK_SECRET=<secret>
+      // A assinatura é HMAC-SHA256 do RAW body com o secret.
+      // Fastify normaliza headers pra lowercase.
+      const sigHeader = (req.headers['webhooksignature'] || req.headers['x-webhook-signature']) as string | undefined;
+      const webhookSecret = env.EVOLUTION_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        if (!sigHeader) {
+          logger.warn({ ip: req.ip }, 'webhook sem assinatura');
+          return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Assinatura do webhook ausente' } });
+        }
+        // Usa o raw body se disponível (exato que veio no POST), senão re-serializa
+        const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+        const expected = createHmac('sha256', webhookSecret)
+          .update(rawBody)
+          .digest('hex');
+        if (sigHeader !== expected) {
+          logger.warn({ ip: req.ip, got: sigHeader.slice(0, 8) + '...' }, 'webhook assinatura inválida');
+          return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Assinatura do webhook inválida' } });
+        }
+      }
+
       const body = req.body as any;
       logger.info({ event: body?.event, instance: body?.instance }, 'webhook recebido');
       if (body?.event === 'messages.upsert') {

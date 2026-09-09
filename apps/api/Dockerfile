@@ -12,7 +12,8 @@ RUN corepack enable
 COPY . .
 
 # Instala deps
-RUN pnpm install --frozen-lockfile
+ENV CI=true
+RUN pnpm install --no-frozen-lockfile
 
 # Gera Prisma client
 RUN pnpm --filter @kairos-crm/database prisma generate

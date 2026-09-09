@@ -70,6 +70,9 @@ export async function login(input: LoginInput) {
     // Caminho explícito: tenant + email
     const tenant = await prisma.tenant.findUnique({ where: { slug: input.tenantSlug } });
     if (!tenant) throw AppError.unauthenticated('Credenciais inválidas');
+    if (tenant.status === 'BLOCKED') {
+      throw AppError.forbidden('Tenant bloqueado por inadimplência. Procure o suporte.');
+    }
     user = await prisma.user.findUnique({
       where: { tenantId_email: { tenantId: tenant.id, email: input.email } },
     });
