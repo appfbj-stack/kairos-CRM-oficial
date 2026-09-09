@@ -7,7 +7,7 @@ import { apiFetch } from '@/lib/api';
 
 export interface AIConfig {
   id?: string;
-  provider: 'OPENAI' | 'GEMINI' | 'CLAUDE' | 'DEEPSEEK' | 'GLM' | 'OLLAMA' | 'OPENROUTER';
+  provider: 'OPENAI' | 'GEMINI' | 'CLAUDE' | 'DEEPSEEK' | 'GLM' | 'OLLAMA';
   model: string | null;
   apiKey: string | null;
   baseUrl: string | null;
@@ -23,56 +23,13 @@ export interface AIConfig {
   hasKey?: boolean;
 }
 
-const PROVIDERS: Record<string, { label: string; models: string[]; placeholder: string; freeModels?: string[] }> = {
+const PROVIDERS: Record<string, { label: string; models: string[]; placeholder: string }> = {
   OPENAI: { label: 'OpenAI', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'], placeholder: 'sk-...' },
   GEMINI: { label: 'Google Gemini', models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro'], placeholder: 'AIza...' },
   CLAUDE: { label: 'Anthropic Claude', models: ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'], placeholder: 'sk-ant-...' },
   DEEPSEEK: { label: 'DeepSeek', models: ['deepseek-chat', 'deepseek-reasoner'], placeholder: 'sk-...' },
   GLM: { label: 'Zhipu GLM', models: ['glm-4-plus', 'glm-4-flash'], placeholder: '...' },
   OLLAMA: { label: 'Ollama (local)', models: ['llama3.1', 'qwen2.5', 'mistral'], placeholder: 'qualquer (não é validado)' },
-  OPENROUTER: {
-    label: 'OpenRouter (todos os modelos)',
-    placeholder: 'sk-or-v1-...',
-    models: [
-      // Pagos (curadoria)
-      'anthropic/claude-3.5-sonnet',
-      'openai/gpt-4o',
-      'openai/gpt-4o-mini',
-      'google/gemini-2.0-flash-exp',
-      'deepseek/deepseek-chat',
-    ],
-    freeModels: [
-      // Meta Llama
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'meta-llama/llama-3.2-3b-instruct:free',
-      'meta-llama/llama-3.1-8b-instruct:free',
-      'meta-llama/llama-3.1-405b-instruct:free',
-      // Qwen
-      'qwen/qwen-2.5-72b-instruct:free',
-      'qwen/qwen-2.5-7b-instruct:free',
-      'qwen/qwq-32b-preview:free',
-      // Google
-      'google/gemini-2.0-flash-exp:free',
-      'google/gemma-2-9b-it:free',
-      'google/gemma-2-27b-it:free',
-      // DeepSeek
-      'deepseek/deepseek-chat:free',
-      'deepseek/deepseek-r1:free',
-      // Mistral / Nous
-      'mistralai/mistral-7b-instruct:free',
-      'mistralai/mistral-small-3.2-24b-instruct:free',
-      'nousresearch/hermes-3-llama-3.1-405b:free',
-      'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
-      // Microsoft
-      'microsoft/phi-3-medium-128k-instruct:free',
-      'microsoft/phi-3.5-mini-128k-instruct:free',
-      // Outros
-      'openchat/openchat-7b:free',
-      'gryphe/mythomist-7b:free',
-      'undi95/remm-slerp-l2-13b:free',
-      'huggingfaceh4/zephyr-7b-beta:free',
-    ],
-  },
 };
 
 export function HermesConfig({ initial }: { initial: AIConfig | null }) {
@@ -170,67 +127,12 @@ export function HermesConfig({ initial }: { initial: AIConfig | null }) {
           </div>
           <div>
             <label className="text-2xs uppercase tracking-wider text-ink-500">Modelo</label>
-            {provider?.freeModels ? (
-              <>
-                <select
-                  className="input mt-1 font-mono text-xs"
-                  value={cfg.model || ''}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === '__custom__') {
-                      setCfg({ ...cfg, model: '' });
-                    } else {
-                      setCfg({ ...cfg, model: v });
-                    }
-                  }}
-                >
-                  <optgroup label="FREE (sem custo)">
-                    {provider.freeModels.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Pagos">
-                    {provider.models.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </optgroup>
-                  <option value="__custom__">Outro (digitar)</option>
-                </select>
-                {(!cfg.model || !provider.freeModels.includes(cfg.model) && !provider.models.includes(cfg.model)) && (
-                  <input
-                    className="input mt-2 font-mono text-xs"
-                    value={cfg.model || ''}
-                    onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
-                    placeholder="provider/modelo (ex: openai/gpt-4o-mini)"
-                  />
-                )}
-              </>
-            ) : (
-              <>
-                <select
-                  className="input mt-1"
-                  value={cfg.model || provider?.models[0]}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === '__custom__') setCfg({ ...cfg, model: '' });
-                    else setCfg({ ...cfg, model: v });
-                  }}
-                >
-                  {provider?.models.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                  <option value="__custom__">Outro (digitar)</option>
-                </select>
-                {cfg.model && !provider?.models.includes(cfg.model) && (
-                  <input
-                    className="input mt-2 font-mono text-xs"
-                    value={cfg.model || ''}
-                    onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
-                    placeholder="modelo custom"
-                  />
-                )}
-              </>
-            )}
+            <input
+              className="input mt-1"
+              value={cfg.model || ''}
+              onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
+              placeholder={provider?.models[0]}
+            />
           </div>
         </div>
         <div className="mt-3">

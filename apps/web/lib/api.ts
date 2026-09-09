@@ -46,25 +46,14 @@ export async function apiFetch<T = any>(
   const { body, accessToken, headers, ...rest } = options;
 
   const base = getApiBase();
-  const hasBody = body !== undefined && body !== null;
-  // Client-side: se nenhum accessToken foi passado, tenta pegar do localStorage automaticamente.
-  // Isso evita ter que passar manualmente em todos os componentes client.
-  let token = accessToken;
-  if (!token && typeof window !== 'undefined') {
-    try {
-      token = window.localStorage.getItem('kcrm_access') || undefined;
-    } catch {
-      // localStorage pode falhar em modo privado; segue sem token
-    }
-  }
   const res = await fetch(`${base}${path}`, {
     ...rest,
     headers: {
-      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(headers as any),
     },
-    body: hasBody ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   const text = await res.text();

@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import { getAccessToken, meRequest } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { WhatsAppAccounts, type WhatsAppAccount } from '@/components/whatsapp/accounts';
-import { InstagramField } from '@/components/whatsapp/InstagramField';
 
 export default async function WhatsAppSettingsPage() {
   const token = getAccessToken();
@@ -22,7 +21,6 @@ export default async function WhatsAppSettingsPage() {
         <p className="mt-0.5 text-sm text-ink-400">Conecte números do WhatsApp via QR Code. Cada conta vira uma inbox separada.</p>
       </div>
       <WhatsAppAccounts initial={accounts} />
-      <InstagramField />
     </div>
   );
 }

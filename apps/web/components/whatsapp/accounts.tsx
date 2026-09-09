@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Smartphone, RefreshCw, Power, Trash2, QrCode, Loader2, Wifi, WifiOff, CheckCircle2, Clock } from 'lucide-react';
+import { Plus, Smartphone, RefreshCw, Power, Trash2, QrCode, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 
 export interface WhatsAppAccount {
@@ -34,8 +34,6 @@ export function WhatsAppAccounts({ initial }: { initial: WhatsAppAccount[] }) {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [qrAge, setQrAge] = useState(0); // segundos desde o QR atual
-  const [secondsToRefresh, setSecondsToRefresh] = useState(0);
 
   async function create() {
     if (!name.trim()) return;
@@ -48,9 +46,7 @@ export function WhatsAppAccounts({ initial }: { initial: WhatsAppAccount[] }) {
       setItems([{ ...created, _count: { conversations: 0 } }, ...items]);
       setShowForm(false);
       setName(''); setNumber('');
-      // Abre o QR direto da conta nova
-      setQrOpen(created.id);
-      await getQR(created.id);
+      router.refresh();
     } catch (err) {
       alert((err as Error).message);
     } finally {
@@ -63,8 +59,6 @@ export function WhatsAppAccounts({ initial }: { initial: WhatsAppAccount[] }) {
     setQrOpen(id);
     setQrCode(null);
     setPairingCode(null);
-    setQrAge(0);
-    setSecondsToRefresh(25);
     try {
       const res = await apiFetch<{ qrCode: string | null; pairingCode: string | null }>(`/api/whatsapp/accounts/${id}/connect`, {
         method: 'POST',
@@ -78,30 +72,6 @@ export function WhatsAppAccounts({ initial }: { initial: WhatsAppAccount[] }) {
       setLoading(false);
     }
   }
-
-  // Polling leve: status a cada 5s, fecha modal só se conectou
-  useEffect(() => {
-    if (!qrOpen) return;
-    let cancelled = false;
-    let statusTimer: any;
-
-    statusTimer = setInterval(async () => {
-      if (cancelled) return;
-      try {
-        const updated = await apiFetch<WhatsAppAccount>(`/api/whatsapp/accounts/${qrOpen}/refresh`, { method: 'POST' });
-        if (cancelled) return;
-        setItems((prev) => prev.map((i) => (i.id === qrOpen ? { ...i, ...updated } : i)));
-        if (updated.status === 'CONNECTED') {
-          setQrOpen(null);
-        }
-      } catch {}
-    }, 5_000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(statusTimer);
-    };
-  }, [qrOpen]);
 
   async function refreshStatus(id: string) {
     try {
@@ -247,43 +217,30 @@ export function WhatsAppAccounts({ initial }: { initial: WhatsAppAccount[] }) {
           <div className="card w-full max-w-md p-6 text-center">
             <h2 className="text-lg font-semibold text-ink-50">Conectar WhatsApp</h2>
             <p className="mt-1 text-sm text-ink-400">Abra o WhatsApp → Configurações → Aparelhos conectados → Conectar aparelho.</p>
-            {loading && !qrCode ? (
+            {loading ? (
               <div className="my-10 grid place-items-center">
                 <Loader2 className="h-10 w-10 animate-spin text-kairos-400" />
                 <p className="mt-3 text-sm text-ink-400">Gerando QR…</p>
               </div>
             ) : qrCode ? (
-              <>
-                <div className="mt-4 grid place-items-center">
-                  <div className="rounded-lg bg-white p-4">
-                    <img
-                      key={qrCode.slice(-32)}
-                      src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
-                      alt="QR Code"
-                      className="h-64 w-64"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-center gap-2 text-2xs text-ink-500">
-                  <Clock className="h-3 w-3" />
-                  <span>
-                    Se não conectar, clique <strong>Atualizar QR</strong> abaixo
-                  </span>
+              <div className="mt-6 grid place-items-center">
+                <div className="rounded-lg bg-white p-4">
+                  <img src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} alt="QR Code" className="h-64 w-64" />
                 </div>
                 {pairingCode && (
-                  <div className="mt-4 rounded-lg bg-ink-900/50 p-3">
+                  <div className="mt-4">
                     <p className="text-2xs text-ink-500">Ou use o código de pareamento:</p>
-                    <p className="mt-1 break-all font-mono text-sm font-bold text-kairos-400">{pairingCode}</p>
+                    <p className="mt-1 font-mono text-lg font-bold text-kairos-400">{pairingCode}</p>
                   </div>
                 )}
-                <p className="mt-4 text-2xs text-ink-500">O modal fecha sozinho quando conectar. Pode deixar aberto.</p>
-              </>
+                <p className="mt-4 text-2xs text-ink-500">A página atualiza sozinha. Pode fechar.</p>
+              </div>
             ) : (
               <p className="my-10 text-sm text-amber-400">QR não gerado. Tente de novo.</p>
             )}
             <div className="mt-6 flex justify-center gap-2">
-              <button onClick={() => getQR(qrOpen)} disabled={loading} className="btn-ghost text-xs">
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Atualizar QR
+              <button onClick={() => getQR(qrOpen)} className="btn-ghost text-xs">
+                <RefreshCw className="h-3.5 w-3.5" /> Atualizar
               </button>
               <button onClick={() => setQrOpen(null)} className="btn-ghost text-xs">Fechar</button>
             </div>

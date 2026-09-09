@@ -6,8 +6,6 @@ import { Logo } from '@/components/ui/Logo';
 import { Badge } from '@/components/ui/AnimatedNumber';
 import { initials } from '@/lib/utils';
 import { SidebarNav, type NavItem } from '@/components/ui/SidebarNav';
-import { NotificationBell } from '@/components/notifications/Bell';
-import { logoutAction } from './actions';
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', iconKey: 'dashboard' },
@@ -17,13 +15,11 @@ const navItems: NavItem[] = [
   { href: '/products', label: 'Produtos', iconKey: 'products' },
   { href: '/services', label: 'Serviços', iconKey: 'services' },
   { href: '/inbox', label: 'Conversas', iconKey: 'conversations' },
-  { href: '/settings/whatsapp', label: 'WhatsApp', iconKey: 'whatsapp' },
   { href: '/knowledge', label: 'Conhecimento', iconKey: 'knowledge' },
   { href: '/hermes', label: 'Kairos IA', iconKey: 'hermes' },
   { href: '/pipelines', label: 'Funis', iconKey: 'pipelines', soon: true },
   { href: '/automations', label: 'Automações', iconKey: 'automations' },
   { href: '/settings', label: 'Configurações', iconKey: 'settings' },
-  { href: '/super-admin', label: 'Painel Operacional', iconKey: 'shield', superAdminOnly: true },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -53,7 +49,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             Navegação
           </div>
           <nav className="space-y-0.5">
-            <SidebarNav items={navItems} role={me.role} />
+            <SidebarNav items={navItems} />
           </nav>
         </div>
 
@@ -70,7 +66,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               </Badge>
             </div>
           </div>
-          <form action={logoutAction} className="mt-2">
+          <form action="/api/auth/logout" method="post" className="mt-2">
             <button type="submit" className="btn-ghost w-full justify-start text-sm">
               <LogOut className="mr-2 h-4 w-4" />
               Sair
@@ -91,8 +87,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <span className="text-sm font-semibold text-ink-100">Dashboard</span>
           </div>
           <div className="flex items-center gap-2">
-            <NotificationBell />
-            <Badge variant="kairos" pulse>Online</Badge>
+            <Badge variant="amber" pulse>Fase 1 — Fundação</Badge>
           </div>
         </div>
         <div className="px-6 py-6 sm:px-8">{children}</div>

@@ -1,48 +1,51 @@
-# dependencies
+# Dependencies
 node_modules/
-.pnpm-store/
+.pnp/
+.pnp.js
 
-# next.js
-apps/web/.next/
-apps/web/out/
-apps/web/build/
-
-# api
-apps/api/dist/
-
-# turbo
+# Build outputs
+dist/
+build/
+.next/
+out/
 .turbo/
 
-# env files
+# Environment
 .env
 .env.local
-.env.production
-*.env
+.env.*.local
+!.env.example
 
-# logs
+# Logs
+logs/
 *.log
 npm-debug.log*
+pnpm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 
-# os
-.DS_Store
-Thumbs.db
-
-# editor
+# Editor
 .vscode/
 .idea/
 *.swp
+*.swo
+.DS_Store
+Thumbs.db
 
-# backups
-*.bak
-*.tar.gz
-*.tar
-*.zip
+# Prisma
+packages/database/prisma/migrations/dev.db*
+*.db
+*.db-journal
 
-# temp
-tmp/
-temp/
+# Test coverage
+coverage/
+.nyc_output/
 
-# migrations err
-migration.err
+# OS
+desktop.ini
+$RECYCLE.BIN/
+
+# Docker volumes (kept locally)
+.docker-data/
+
+# Seeds temporários
+*.seed.json

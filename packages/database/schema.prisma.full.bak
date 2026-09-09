@@ -295,13 +295,11 @@ model Contact {
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  company        Company?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  leads          Lead[]
-  conversations  Conversation[]
-  appointments   Appointment[]
-  tasks          Task[]
-  followups      FollowUp[]
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company  Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  leads    Lead[]
+  conversations Conversation[]
+  appointments Appointment[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -569,7 +567,7 @@ model AIConfig {
   provider            LLMProvider @default(OPENAI)
   model               String      @default("gpt-4o-mini")
   apiKey              String?     // criptografada
-  assistantName       String      @default("Kairos IA")
+  assistantName       String      @default("Ana")
   personality         String?     // "amigável e profissional"
   objectives          String[]    @default([]) // ["atender", "agendar", "qualificar"]
   transferToHumanOn   String[]    @default([]) // ["palavra-chave", "reclamação", "pagamento"]

@@ -2,15 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronRight, LayoutDashboard, Users, MessageSquare, KanbanSquare, Settings, Sparkles, Contact, CheckSquare, Package, Briefcase, BookOpen, Zap, Smartphone, Shield } from 'lucide-react';
+import { ChevronRight, LayoutDashboard, Users, MessageSquare, KanbanSquare, Settings, Sparkles, Contact, CheckSquare, Package, Briefcase, BookOpen, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface NavItem {
   href: string;
   label: string;
-  iconKey: 'dashboard' | 'contacts' | 'leads' | 'tasks' | 'products' | 'services' | 'conversations' | 'pipelines' | 'hermes' | 'settings' | 'knowledge' | 'automations' | 'whatsapp' | 'shield';
+  iconKey: 'dashboard' | 'contacts' | 'leads' | 'tasks' | 'products' | 'services' | 'conversations' | 'pipelines' | 'hermes' | 'settings' | 'knowledge' | 'automations';
   soon?: boolean;
-  superAdminOnly?: boolean;
 }
 
 const ICONS: Record<NavItem['iconKey'], any> = {
@@ -26,16 +25,13 @@ const ICONS: Record<NavItem['iconKey'], any> = {
   settings: Settings,
   knowledge: BookOpen,
   automations: Zap,
-  whatsapp: Smartphone,
-  shield: Shield,
 };
 
-export function SidebarNav({ items, role }: { items: NavItem[]; role?: string }) {
+export function SidebarNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
-  const visible = items.filter((i) => !i.superAdminOnly || role === 'SUPER_ADMIN');
   return (
     <nav className="space-y-0.5">
-      {visible.map((item) => {
+      {items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(item.href + '/');
         const Icon = ICONS[item.iconKey] || LayoutDashboard;
         return (
@@ -45,9 +41,7 @@ export function SidebarNav({ items, role }: { items: NavItem[]; role?: string })
             className={cn(
               'group flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition',
               active
-                ? item.superAdminOnly
-                  ? 'bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/20'
-                  : 'bg-kairos-500/10 text-kairos-300 ring-1 ring-kairos-500/20'
+                ? 'bg-kairos-500/10 text-kairos-300 ring-1 ring-kairos-500/20'
                 : 'text-ink-400 hover:bg-ink-900 hover:text-ink-100',
             )}
           >

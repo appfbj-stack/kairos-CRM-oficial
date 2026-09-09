@@ -17,12 +17,9 @@ import { productRoutes } from './modules/crm/products/products.routes';
 import { serviceRoutes } from './modules/crm/services/services.routes';
 import { whatsappRoutes } from './modules/whatsapp/whatsapp.routes';
 import { hermesRoutes } from './modules/hermes/hermes.routes';
-import { superAdminRoutes } from './modules/superadmin/superadmin.routes';
-import { notificationRoutes } from './modules/notifications/notifications.routes';
 import { knowledgeRoutes } from './modules/knowledge/knowledge.routes';
 import { automationsRoutes } from './modules/automations/automations.routes';
 import { auditRoutes } from './modules/audit/audit.routes';
-import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 
 async function buildServer() {
   const app = Fastify({
@@ -44,20 +41,6 @@ async function buildServer() {
 
   // Erros sensíveis do @fastify/sensible
   await app.register(sensible);
-
-  // Tolerar body vazio com Content-Type: application/json
-  // (cliente antigo mandava POST sem body mas com header)
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
-    if (!body || (typeof body === 'string' && body.trim() === '')) {
-      done(null, {});
-      return;
-    }
-    try {
-      done(null, JSON.parse(body as string));
-    } catch (err) {
-      done((err as Error), undefined);
-    }
-  });
 
   // Health
   await app.register(healthRoutes);
@@ -113,15 +96,6 @@ async function buildServer() {
 
   // /api/audit (audit log do tenant)
   await auditRoutes(app);
-
-  // /api/dashboard (KPIs para o dashboard)
-  await dashboardRoutes(app);
-
-  // /api/superadmin/* (painel operacional LGPD-compliant)
-  await superAdminRoutes(app);
-
-  // /api/notifications (sino + lista)
-  await notificationRoutes(app);
 
   // 404
   app.setNotFoundHandler((req, reply) => {

@@ -85,15 +85,7 @@ export async function refreshStatus(actor: AuthenticatedUser, id: string) {
   try {
     const s = await evolution.getStatus(acc.apiKey);
     if (s) {
-      // Connected = websocket aberto, LoggedIn = usuario logou no WhatsApp via QR
-      // So marcar CONNECTED quando ambos forem true (senao fica falso positivo)
-      if (s.LoggedIn && s.Connected) {
-        status = 'CONNECTED';
-      } else if (s.Connected) {
-        status = 'CONNECTING'; // websocket aberto mas ainda sem scan
-      } else {
-        status = 'DISCONNECTED';
-      }
+      status = s.Connected ? 'CONNECTED' : 'DISCONNECTED';
       if (s.jid) phone = normalizePhone(s.jid);
     }
   } catch (err) {
@@ -214,37 +206,6 @@ export async function handleIncomingMessage(payload: any) {
   });
 
   logger.info({ conversationId: conversation.id, fromMe, messageId: msg.id }, 'webhook: mensagem salva');
-
-  // Notificações in-app (apenas mensagens recebidas)
-  if (!fromMe) {
-    import('../notifications/notifications.service').then(({ notifyTenantStaff, notify }) => {
-      const preview = extractContent(data).slice(0, 80);
-      // Se conversa está com humano atribuído, notifica só ele
-      if (conversation.assignedUserId) {
-        notify({
-          tenantId: account.tenantId,
-          userId: conversation.assignedUserId,
-          type: 'NEW_MESSAGE',
-          title: `Nova mensagem de ${contact.name || phone}`,
-          body: preview,
-          link: `/inbox/${conversation.id}`,
-          icon: 'MessageSquare',
-          metadata: { conversationId: conversation.id, contactId: contact.id },
-        });
-      } else {
-        // Sem agente atribuído: notifica todo o staff
-        notifyTenantStaff({
-          tenantId: account.tenantId,
-          type: 'NEW_CONVERSATION',
-          title: `Nova conversa: ${contact.name || phone}`,
-          body: preview,
-          link: `/inbox/${conversation.id}`,
-          icon: 'MessageSquare',
-          metadata: { conversationId: conversation.id, contactId: contact.id },
-        });
-      }
-    }).catch((err: Error) => logger.error({ err: err.message }, 'falha ao importar notifications'));
-  }
 
   // Dispara Kairos IA se conversa WITH_AI e mensagem recebida
   if (!fromMe && conversation.status === 'WITH_AI' && !conversation.aiPaused) {

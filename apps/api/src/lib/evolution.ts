@@ -95,27 +95,7 @@ export const evolution = {
     } catch (err) {
       logger.warn({ err: (err as Error).message }, 'connect: chamada inicial falhou (pode já estar conectado)');
     }
-    // Evolution Go: após o POST /connect, o QR demora ~2-5s pra ficar disponível.
-    // Retry com backoff pra capturar o QR antes de desistir.
-    return this.getQrWithRetry(instanceToken, 6, 1500);
-  },
-
-  async getQrWithRetry(instanceToken: string, attempts: number, delayMs: number) {
-    let lastErr: string | null = null;
-    for (let i = 0; i < attempts; i++) {
-      try {
-        const r = await this.getQr(instanceToken);
-        if (r.qrCode) return r;
-        lastErr = 'qrCode null';
-      } catch (err) {
-        lastErr = (err as Error).message;
-        logger.warn({ attempt: i + 1, err: lastErr }, 'getQr retry');
-      }
-      if (i < attempts - 1) {
-        await new Promise((res) => setTimeout(res, delayMs));
-      }
-    }
-    return { qrCode: null, pairingCode: null, error: lastErr };
+    return this.getQr(instanceToken);
   },
 
   async getQr(instanceToken: string) {
