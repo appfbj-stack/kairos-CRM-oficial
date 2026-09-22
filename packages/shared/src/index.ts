@@ -1,4 +1,5 @@
 export * from './errors';
+export * from './duration';
 export * from './types/roles';
 export * from './types/auth';
 export * from './schemas/auth';

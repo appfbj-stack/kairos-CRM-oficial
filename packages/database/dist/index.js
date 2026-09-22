@@ -14,10 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.prisma = void 0;
-exports.setTenantContext = setTenantContext;
-exports.getTenantContext = getTenantContext;
-exports.withTenantContext = withTenantContext;
+exports.getTenantContextDebug = exports.withTenantContext = exports.getTenantContext = exports.setTenantContext = exports.prisma = void 0;
 const client_1 = require("@prisma/client");
 // Singleton do Prisma (evita múltiplas conexões em dev com HMR)
 const globalForPrisma = globalThis;
@@ -31,26 +28,15 @@ if (process.env.NODE_ENV !== 'production') {
     globalForPrisma.prisma = exports.prisma;
 }
 // =====================================================
-// Tenant context — setado por request no Fastify
-// para uso com Row Level Security (Fase 2+)
+// Tenant context — AsyncLocalStorage (Fase 1 refactor)
+// Resolve race condition do antigo currentTenantId global.
+// API compatível com versões anteriores.
 // =====================================================
-let currentTenantId = null;
-function setTenantContext(tenantId) {
-    currentTenantId = tenantId;
-}
-function getTenantContext() {
-    return currentTenantId;
-}
-async function withTenantContext(tenantId, fn) {
-    const previous = currentTenantId;
-    setTenantContext(tenantId);
-    try {
-        return await fn();
-    }
-    finally {
-        setTenantContext(previous);
-    }
-}
+var context_1 = require("./context");
+Object.defineProperty(exports, "setTenantContext", { enumerable: true, get: function () { return context_1.setTenantContext; } });
+Object.defineProperty(exports, "getTenantContext", { enumerable: true, get: function () { return context_1.getTenantContext; } });
+Object.defineProperty(exports, "withTenantContext", { enumerable: true, get: function () { return context_1.withTenantContext; } });
+Object.defineProperty(exports, "getTenantContextDebug", { enumerable: true, get: function () { return context_1.getTenantContextDebug; } });
 // =====================================================
 // Re-exports
 // =====================================================

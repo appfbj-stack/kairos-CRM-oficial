@@ -1,5 +1,5 @@
 import { prisma } from '@kairos-crm/database';
-import { AppError, type LoginInput, type RegisterInput } from '@kairos-crm/shared';
+import { AppError, parseDurationToMs, msToSeconds, type LoginInput, type RegisterInput } from '@kairos-crm/shared';
 import { hashPassword, verifyPassword } from '../../lib/password';
 import {
   generateRefreshToken,
@@ -209,21 +209,6 @@ async function issueTokens(userId: string) {
     },
     accessToken,
     refreshToken,
-    expiresIn: parseDurationToMs(env.JWT_ACCESS_EXPIRES_IN) / 1000,
+    expiresIn: msToSeconds(parseDurationToMs(env.JWT_ACCESS_EXPIRES_IN)),
   };
-}
-
-function parseDurationToMs(d: string): number {
-  const match = d.match(/^(\d+)(ms|s|m|h|d)$/);
-  if (!match) return 7 * 24 * 60 * 60 * 1000;
-  const [, n, unit] = match;
-  const num = parseInt(n, 10);
-  switch (unit) {
-    case 'ms': return num;
-    case 's': return num * 1000;
-    case 'm': return num * 60 * 1000;
-    case 'h': return num * 60 * 60 * 1000;
-    case 'd': return num * 24 * 60 * 60 * 1000;
-    default: return 7 * 24 * 60 * 60 * 1000;
-  }
 }

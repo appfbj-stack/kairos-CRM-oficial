@@ -1,0 +1,592 @@
+openapi: 3.1.0
+info:
+  title: Kairos CRM — External API
+  version: 1.0.0
+  description: |
+    API para integração com apps externos (App Oficina, App Imobiliária, App Igreja, etc).
+
+    ## Autenticação
+
+    1. Cliente envia `POST /api/v1/external/auth/token` com:
+       - Headers: `X-Kairos-App-Id`, `X-Kairos-Key-Id`, `X-Kairos-Timestamp`, `X-Kairos-Signature`
+       - Body: `{ "keyId": "<prefix>", "timestamp": <unix> }`
+       - Signature: `t=<unix>,v1=<hex-hmac-sha256>` onde `v1 = HMAC-SHA256(secret, "${timestamp}.${rawBody}")`
+
+    2. Servidor responde com `{ authToken, expiresIn, scopes, tenantId }`
+    3. Cliente usa `Authorization: Bearer <authToken>` em chamadas subsequentes
+
+    ## Scopes disponíveis
+
+    - `crm.contact.read/write`, `crm.lead.read/write`, `crm.product.read/write`
+    - `crm.service.read/write`, `crm.appointment.read/write`, `crm.followup.read/write`
+    - `conversation.read/write`, `ai.analyze`, `ai.chat`
+    - `webhooks.read/write`, `quote.read/write`
+
+    ## Multi-tenant
+
+    Cada `Application` é vinculada a UM `Tenant` no momento da criação. O `tenantId`
+    é derivado da credencial (NUNCA do body). Toda query é automaticamente
+    escopada ao tenant do app.
+
+    ## Webhooks outbound
+
+    Apps podem receber eventos do CRM. Configurar via `POST /api/v1/external/webhooks`
+    com `url` + `events` + `secret`. Eventos são entregues com HMAC-SHA256
+    assinado em `X-Kairos-Signature: t=<ts>,v1=<hex>`.
+  contact:
+    name: Kairós Tecnologia
+    url: https://fbautomacao.space
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://crm.fbautomacao.space
+    description: Produção
+
+tags:
+  - name: Auth
+    description: Token issuance + management
+  - name: Me
+    description: Info do app + tenant vinculado
+  - name: AI
+    description: Classificação + chat agent
+  - name: Webhooks
+    description: Subscriptions CRUD
+  - name: System
+    description: Health check público
+
+# =====================================================
+# Security
+# =====================================================
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Token opaco de 256 bits retornado por `POST /auth/token`.
+        Header: `Authorization: Bearer <authToken>`
+        TTL: 15min (default), renovável via novo `POST /auth/token`
+
+  schemas:
+    # ===========================================
+    # Erro padrão
+    # ===========================================
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, TENANT_MISMATCH, RATE_LIMITED, INTERNAL_ERROR]
+            message:
+              type: string
+            details:
+              type: object
+              nullable: true
+
+    # ===========================================
+    # Auth
+    # ===========================================
+    AuthTokenRequest:
+      type: object
+      required: [keyId, timestamp]
+      properties:
+        keyId:
+          type: string
+          minLength: 8
+          maxLength: 32
+          description: "Prefixo da ApiKey (ex: kairos_abc12345)"
+          example: "kairos_ofc01a3f1"
+        timestamp:
+          type: integer
+          format: int64
+          description: "Unix timestamp em segundos. Tolerância: ±300s"
+          example: 1737043200
+
+    AuthTokenResponse:
+      type: object
+      required: [authToken, expiresIn, scopes, tenantId]
+      properties:
+        authToken:
+          type: string
+          description: "Token opaco de ~43 chars (base64url). Use em Authorization: Bearer"
+          example: "abc123_def456-ghi789_jkl012-mno345-pqr678"
+        expiresIn:
+          type: integer
+          description: "TTL em segundos"
+          example: 900
+        expiresAt:
+          type: string
+          format: date-time
+        scopes:
+          type: array
+          items: { type: string }
+          example: ["crm.contact.write", "crm.lead.write", "ai.analyze"]
+        tenantId:
+          type: string
+          format: uuid
+
+    Application:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [ACTIVE, PAUSED, REVOKED] }
+        scopes:
+          type: array
+          items: { type: string }
+
+    Tenant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, BLOCKED, TRIAL] }
+
+    # ===========================================
+    # AI
+    # ===========================================
+    AIAnalyzeRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          example: "Meu Gol 2018 está fazendo barulho quando freio. Quanto custa trocar as pastilhas?"
+        context:
+          type: object
+          properties:
+            contactId: { type: string, format: uuid }
+            leadId: { type: string, format: uuid }
+            channel:
+              type: string
+              enum: [whatsapp, email, chat, web]
+              default: whatsapp
+            locale:
+              type: string
+              default: "pt-BR"
+
+    AIAnalyzeResponse:
+      type: object
+      required: [intent, requires_human, extracted_entities, suggested_actions, confidence, source]
+      properties:
+        intent:
+          type: string
+          enum: [greeting, thanks, goodbye, request_human, orcamento, agendamento, reclamacao, compra, info, social, unknown]
+        category:
+          type: string
+          description: "Ex: freios, pintura, instalação"
+        product_or_service:
+          type: string
+        vehicle:
+          type: object
+          properties:
+            model: { type: string }
+            year: { type: integer }
+        funnel_stage:
+          type: string
+          enum: [orcamento, qualificado, won, lost, info]
+        temperature:
+          type: string
+          enum: [cold, warm, hot]
+        requires_human:
+          type: boolean
+        extracted_entities:
+          type: object
+          description: "Entidades extraídas (vehicleYear, currency, phones, emails)"
+        suggested_actions:
+          type: array
+          description: "Ações QUE O BACKEND PODE EXECUTAR (não ordens)"
+          items:
+            type: object
+            required: [type, params]
+            properties:
+              type:
+                type: string
+                enum: [upsert_contact, create_lead, update_lead, move_lead, create_quote, search_products, create_task, handoff_to_human, send_whatsapp_message]
+              params:
+                type: object
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        source:
+          type: string
+          enum: [deterministic, llm]
+          description: "Indica se LLM foi chamado"
+        model:
+          type: string
+          description: "Modelo usado (se source=llm)"
+        tokensIn:
+          type: integer
+        tokensOut:
+          type: integer
+
+    AIChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant, tool]
+              content:
+                type: string
+                minLength: 1
+                maxLength: 8000
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        maxTokens:
+          type: integer
+          minimum: 50
+          maximum: 4000
+
+    AIChatResponse:
+      type: object
+      properties:
+        content:
+          type: string
+          nullable: true
+        toolCalls:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              arguments: { type: object }
+        usage:
+          type: object
+          properties:
+            promptTokens: { type: integer }
+            completionTokens: { type: integer }
+        model: { type: string }
+
+    # ===========================================
+    # Webhooks
+    # ===========================================
+    WebhookEndpoint:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items: { type: string, enum: [lead.created, lead.updated, lead.stage_changed, lead.won, lead.lost, contact.created, contact.updated, message.received, message.sent, appointment.created, appointment.confirmed, appointment.cancelled, followup.scheduled, followup.sent, followup.failed, conversation.created, conversation.closed] }
+        active: { type: boolean }
+        description: { type: string, nullable: true }
+        secretLastFour: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    WebhookEndpointCreateRequest:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+          example: "https://meu-app.com/webhook"
+        events:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            enum: [lead.created, lead.updated, lead.stage_changed, lead.won, lead.lost, contact.created, contact.updated, message.received, message.sent, appointment.created, appointment.confirmed, appointment.cancelled, followup.scheduled, followup.sent, followup.failed, conversation.created, conversation.closed]
+        description:
+          type: string
+          maxLength: 200
+
+    WebhookEndpointCreateResponse:
+      allOf:
+        - $ref: '#/components/schemas/WebhookEndpoint'
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: "🔐 SECRET RETORNADO APENAS 1 VEZ. Guarde com segurança."
+              example: "whsec_a3f1b2c4d5e6f7g8..."
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        event: { type: string }
+        status: { type: string, enum: [PENDING, DELIVERING, DELIVERED, FAILED] }
+        attempts: { type: integer }
+        responseStatus: { type: integer, nullable: true }
+        failedReason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        deliveredAt: { type: string, format: date-time, nullable: true }
+        lastAttemptAt: { type: string, format: date-time, nullable: true }
+
+# =====================================================
+# Paths
+# =====================================================
+paths:
+  /api/v1/external/health:
+    get:
+      tags: [System]
+      summary: Health check público (sem auth)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: kairos-crm-api }
+                  api: { type: string, example: v1/external }
+
+  /api/v1/external/auth/token:
+    post:
+      tags: [Auth]
+      summary: Trocar API Key + HMAC por authToken opaco (TTL 15min)
+      description: |
+        **Fluxo de autenticação**:
+        1. App computa `signature = HMAC-SHA256(secret, "${timestamp}.${body}")`
+        2. App envia POST com headers de assinatura + body JSON `{keyId, timestamp}`
+        3. Servidor valida HMAC, lookup ApiKey, decrypt secret, verify signature
+        4. Se válido: gera authToken, persiste hash no DB, retorna
+        5. App usa `Authorization: Bearer <authToken>` por 15min
+      security: []
+      parameters:
+        - name: X-Kairos-App-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Kairos-Key-Id
+          in: header
+          required: true
+          schema: { type: string, example: "kairos_ofc01a3f1" }
+        - name: X-Kairos-Timestamp
+          in: header
+          required: true
+          schema: { type: string, example: "1737043200" }
+        - name: X-Kairos-Signature
+          in: header
+          required: true
+          schema: { type: string, example: "t=1737043200,v1=abc123..." }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthTokenRequest'
+      responses:
+        '200':
+          description: Token emitido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          description: Assinatura inválida, app inativa, etc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/external/me:
+    get:
+      tags: [Me]
+      summary: Info do app autenticado + tenant vinculado
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  application: { $ref: '#/components/schemas/Application' }
+                  tenant: { $ref: '#/components/schemas/Tenant' }
+                  tokenId: { type: string, format: uuid }
+
+  /api/v1/external/ai/analyze:
+    post:
+      tags: [AI]
+      summary: Classificar mensagem → JSON estruturado + suggested_actions
+      description: |
+        Tenta classificador determinístico PRIMEIRO (0 tokens para casos óbvios como "oi", "obrigado").
+        Se confiança < 0.85 OU sem match, chama LLM com system prompt compacto.
+
+        **Backend decide execução**: a LLM devolve SUGESTÕES, não ordens. O app deve
+        revisar `suggested_actions` e decidir se executa via `/leads`, `/contacts`, etc.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIAnalyzeRequest'
+      responses:
+        '200':
+          description: Análise estruturada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIAnalyzeResponse'
+        '400':
+          description: IA não configurada para o tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit (60 req/min por app)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - BearerAuth: ['ai.analyze']
+
+  /api/v1/external/ai/chat:
+    post:
+      tags: [AI]
+      summary: Chat agent com tools (create_lead, search_products, etc)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIChatRequest'
+      responses:
+        '200':
+          description: Resposta do agente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIChatResponse'
+      security:
+        - BearerAuth: ['ai.chat']
+
+  /api/v1/external/webhooks:
+    get:
+      tags: [Webhooks]
+      summary: Lista endpoints do app
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/WebhookEndpoint' }
+      security:
+        - BearerAuth: ['webhooks.read']
+
+    post:
+      tags: [Webhooks]
+      summary: Criar endpoint (retorna secret 1x)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookEndpointCreateRequest'
+      responses:
+        '201':
+          description: Endpoint criado (secret retornado!)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEndpointCreateResponse'
+      security:
+        - BearerAuth: ['webhooks.write']
+
+  /api/v1/external/webhooks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Webhooks]
+      summary: Detalha 1 endpoint
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookEndpoint' }
+      security:
+        - BearerAuth: ['webhooks.read']
+
+    patch:
+      tags: [Webhooks]
+      summary: Atualizar URL/eventos/active
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookEndpointCreateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookEndpoint' }
+      security:
+        - BearerAuth: ['webhooks.write']
+
+    delete:
+      tags: [Webhooks]
+      summary: Desativar endpoint (soft)
+      responses:
+        '204':
+          description: Desativado
+      security:
+        - BearerAuth: ['webhooks.write']
+
+  /api/v1/external/webhooks/{id}/deliveries:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Webhooks]
+      summary: Lista deliveries recentes (debug)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/WebhookDelivery' }
+      security:
+        - BearerAuth: ['webhooks.read']

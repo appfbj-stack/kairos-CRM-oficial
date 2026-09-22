@@ -176,6 +176,7 @@ model Tenant {
   auditLogs     AuditLog[]
   accessTickets AccessTicket[]
   notifications Notification[]
+  applications  Application[] // apps externos vinculados a este tenant (Fase 9 API externa)
 
   // Fase 2
   contacts      Contact[]
@@ -791,4 +792,162 @@ model Notification {
   @@index([tenantId, createdAt])
   @@index([type])
   @@map("notifications")
+}
+
+// =====================================================================
+// FASE 9 (projeto API externa) — APPLICATIONS / API KEYS / WEBHOOKS
+// Multi-tenant por design: cada Application é vinculada a UM Tenant.
+// Isolamento garantido por (a) FK + (b) middleware que sobrescreve
+// tenantId do body pelo da credencial.
+// =====================================================================
+
+enum ApplicationStatus {
+  ACTIVE
+  PAUSED
+  REVOKED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERING
+  DELIVERED
+  FAILED
+}
+
+model Application {
+  id              String            @id @default(uuid())
+  tenantId        String
+  name            String
+  slug            String            @unique
+  description     String?
+  logoUrl         String?
+  scopes          String[]          @default([]) // ["crm.contact.write", "ai.analyze", ...]
+  status          ApplicationStatus @default(ACTIVE)
+  ipAllowlist     String[]          @default([]) // CIDRs permitidos (vazio = sem restrição)
+  rateLimitPerMinute Int             @default(600)
+  contactEmail    String?           // email de notificação do dono do app
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  revokedAt       DateTime?
+  revokedReason   String?
+
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeys         ApiKey[]
+  webhooks        WebhookEndpoint[]
+  authTokens      AuthToken[]
+  auditLogs       ApplicationAuditLog[]
+
+  @@index([tenantId, status])
+  @@index([status])
+  @@map("applications")
+}
+
+model ApiKey {
+  id              String    @id @default(uuid())
+  applicationId   String
+  prefix          String    @unique // ex: "kairos_ofc01a3f1" — primeiros 12 chars, identificador público
+  secretHash      String    // SHA-256 do secret completo (lookup/identificação, NÃO verificação HMAC)
+  secretEncrypted String?   // AES-256-GCM ciphertext (base64: iv.tag.ciphertext) — usado pra verificar HMAC
+  secretLastFour  String    // pra exibir na UI ("...a3f1")
+  scopes          String[]  @default([]) // override do app — vazio herda do app
+  description     String?
+  expiresAt       DateTime?
+  lastUsedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  revokedAt       DateTime?
+  revokedReason   String?
+
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  authTokens      AuthToken[]
+
+  @@index([applicationId])
+  @@index([revokedAt])
+  @@map("api_keys")
+}
+
+model AuthToken {
+  id              String    @id @default(uuid())
+  apiKeyId        String
+  applicationId   String    // denormalizado pra query rápida (sem join)
+  tenantId        String    // denormalizado — tenant ao qual o app está vinculado
+  tokenHash       String    @unique // SHA256 do token opaco (curta duração)
+  scopes          String[]  // resolved scopes (effective: app + key override)
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  lastUsedAt      DateTime?
+  ipAddress       String?
+  userAgent       String?
+
+  apiKey          ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId, expiresAt])
+  @@index([applicationId, expiresAt])
+  @@index([tenantId, expiresAt])
+  @@index([revokedAt])
+  @@map("auth_tokens")
+}
+
+model WebhookEndpoint {
+  id              String    @id @default(uuid())
+  applicationId   String
+  url             String
+  events          String[]  @default([]) // ["lead.created", "message.received", ...]
+  secretHash      String    // SHA256 do secret (lookup/identificação)
+  secretEncrypted String?   // AES-256-GCM ciphertext (usado pra assinar outbound)
+  secretLastFour  String
+  active          Boolean   @default(true)
+  description     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  deliveries      WebhookDelivery[]
+
+  @@index([applicationId, active])
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id              String                @id @default(uuid())
+  endpointId      String
+  event           String
+  payload         Json
+  responseStatus  Int?
+  responseBody    String?               // truncado em 1KB
+  attempts        Int                   @default(0)
+  status          WebhookDeliveryStatus @default(PENDING)
+  nextAttemptAt   DateTime?
+  lastAttemptAt   DateTime?
+  deliveredAt     DateTime?
+  failedReason    String?
+  createdAt       DateTime              @default(now())
+
+  endpoint        WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId, createdAt])
+  @@index([event, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([deliveredAt])
+  @@map("webhook_deliveries")
+}
+
+model ApplicationAuditLog {
+  id              String    @id @default(uuid())
+  applicationId   String
+  apiKeyId        String?
+  action          String    // "auth.token.issued", "lead.created", "webhook.delivered", ...
+  resource        String?
+  resourceId      String?
+  metadata        Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+  @@index([action])
+  @@map("application_audit_logs")
 }

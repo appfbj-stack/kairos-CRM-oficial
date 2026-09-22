@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:run": "vitest run --config ./vitest.config.ts tests/unit/",
     "test:watch": "vitest",
     "test:tenant-isolation": "vitest run tests/tenant-isolation.test.ts"
   },
@@ -16,7 +17,7 @@
     "@fastify/cors": "^10.0.1",
     "@fastify/helmet": "^12.0.1",
     "@fastify/jwt": "^9.0.1",
-    "@fastify/rate-limit": "^10.1.1",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/sensible": "^6.0.1",
     "@kairos-crm/database": "workspace:*",
     "@kairos-crm/shared": "workspace:*",

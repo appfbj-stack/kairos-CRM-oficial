@@ -1,0 +1,11 @@
+{
+  "name": "app-stub",
+  "version": "1.0.0",
+  "description": "Prova de vida: webhook receiver + sender pra Kairos CRM",
+  "scripts": {
+    "start": "tsx server.ts"
+  },
+  "dependencies": {
+    "tsx": "^4.19.0"
+  }
+}

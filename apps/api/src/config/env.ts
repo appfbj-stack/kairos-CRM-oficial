@@ -21,6 +21,15 @@ const envSchema = z.object({
   EVOLUTION_API_KEY: z.string().default('kairos-evolution-key'),
   EVOLUTION_WEBHOOK_URL: z.string().optional(),
   EVOLUTION_WEBHOOK_SECRET: z.string().optional(), // se setado, exige HMAC SHA256 no header
+
+  // Fase 9 — API externa
+  // Master key pra encryption at rest dos ApiKey secrets (AES-256-GCM)
+  // DEVE ser 32 bytes em base64url (43 chars). Gere com: openssl rand -base64 32
+  // Em produção: armazenar em secret manager (Vault/AWS Secrets Manager/etc)
+  KAIROS_API_MASTER_KEY: z.string().min(32, 'KAIROS_API_MASTER_KEY deve ter no mínimo 32 chars (32 bytes base64 = 43 chars)').optional(),
+
+  // TTL do auth token externo (default 15m, igual ao JWT humano)
+  EXTERNAL_AUTH_TOKEN_TTL: z.string().default('15m'),
 });
 
 const parsed = envSchema.safeParse(process.env);

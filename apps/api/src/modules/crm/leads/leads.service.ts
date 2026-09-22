@@ -1,6 +1,7 @@
 import { prisma } from '@kairos-crm/database';
 import { AppError, type AuthenticatedUser } from '@kairos-crm/shared';
 import type { CreateLeadInput, UpdateLeadInput, MoveLeadInput } from './leads.schema';
+import { emit } from '../../webhooks/dispatcher';
 
 export async function listLeads(actor: AuthenticatedUser, query: {
   pipelineId?: string;
@@ -86,9 +87,10 @@ export async function createLead(actor: AuthenticatedUser, input: CreateLeadInpu
   if (stage.pipelineId !== input.pipelineId) throw AppError.validation('Etapa não pertence ao pipeline');
   if (!pipeline || pipeline.tenantId !== actor.tenantId) throw AppError.tenantMismatch();
 
+  const tenantId = actor.tenantId;
   return prisma.lead.create({
     data: {
-      tenantId: actor.tenantId,
+      tenantId,
       contactId: input.contactId,
       pipelineId: input.pipelineId,
       stageId: input.stageId,
@@ -99,6 +101,22 @@ export async function createLead(actor: AuthenticatedUser, input: CreateLeadInpu
       origin: input.origin,
       intention: input.intention,
     },
+  }).then((lead) => {
+    // F3.5: fire-and-forget webhook
+    emit('lead.created', tenantId, {
+      id: lead.id,
+      title: lead.title,
+      valueCents: lead.valueCents,
+      status: lead.status,
+      temperature: lead.temperature,
+      pipelineId: lead.pipelineId,
+      stageId: lead.stageId,
+      contactId: lead.contactId,
+      interest: lead.interest,
+      origin: lead.origin,
+      createdAt: lead.createdAt,
+    }).catch(() => {});
+    return lead;
   });
 }
 
@@ -119,9 +137,10 @@ export async function updateLead(actor: AuthenticatedUser, id: string, input: Up
 
 export async function moveLead(actor: AuthenticatedUser, id: string, input: MoveLeadInput) {
   if (!actor.tenantId) throw AppError.forbidden();
+  const tenantId = actor.tenantId;
   const lead = await prisma.lead.findFirst({ where: { id, deletedAt: null } });
   if (!lead) throw AppError.notFound('Lead');
-  if (lead.tenantId !== actor.tenantId) throw AppError.tenantMismatch();
+  if (lead.tenantId !== tenantId) throw AppError.tenantMismatch();
 
   // Verifica que a stage pertence ao mesmo pipeline
   const stage = await prisma.pipelineStage.findFirst({ where: { id: input.stageId } });
@@ -130,19 +149,48 @@ export async function moveLead(actor: AuthenticatedUser, id: string, input: Move
 
   // Se moveu pra WON/LOST, atualiza status
   const data: any = { stageId: input.stageId };
+  let statusAfter: 'OPEN' | 'WON' | 'LOST' = 'OPEN';
   if (stage.isWon) {
     data.status = 'WON';
     data.wonAt = new Date();
+    statusAfter = 'WON';
   } else if (stage.isLost) {
     data.status = 'LOST';
     data.lostAt = new Date();
+    statusAfter = 'LOST';
   } else {
     data.status = 'OPEN';
     data.wonAt = null;
     data.lostAt = null;
   }
 
-  return prisma.lead.update({ where: { id }, data });
+  return prisma.lead.update({ where: { id }, data }).then((updated) => {
+    // F3.5: dispara eventos granulares
+    emit('lead.stage_changed', tenantId, {
+      id: updated.id,
+      title: updated.title,
+      pipelineId: updated.pipelineId,
+      stageId: updated.stageId,
+      stageName: stage.name,
+      status: updated.status,
+      previousStatus: lead.status,
+    }).catch(() => {});
+
+    if (statusAfter === 'WON') {
+      emit('lead.won', tenantId, {
+        id: updated.id, title: updated.title,
+        pipelineId: updated.pipelineId, stageId: updated.stageId,
+        valueCents: updated.valueCents, wonAt: updated.wonAt,
+      }).catch(() => {});
+    } else if (statusAfter === 'LOST') {
+      emit('lead.lost', tenantId, {
+        id: updated.id, title: updated.title,
+        pipelineId: updated.pipelineId, stageId: updated.stageId,
+        lostAt: updated.lostAt,
+      }).catch(() => {});
+    }
+    return updated;
+  });
 }
 
 export async function deleteLead(actor: AuthenticatedUser, id: string) {

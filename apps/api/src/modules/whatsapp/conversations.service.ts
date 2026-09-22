@@ -2,6 +2,7 @@ import { prisma } from '@kairos-crm/database';
 import { AppError, type AuthenticatedUser } from '@kairos-crm/shared';
 import { evolution } from '../../lib/evolution';
 import { logger } from '../../lib/logger';
+import { emit } from '../webhooks/dispatcher';
 
 export async function listConversations(actor: AuthenticatedUser, query: { status?: string; search?: string; page: number; limit: number }) {
   if (!actor.tenantId) throw AppError.forbidden();
@@ -106,6 +107,18 @@ export async function sendMessage(actor: AuthenticatedUser, conversationId: stri
       where: { id: conv.id },
       data: { lastMessageAt: new Date(), lastMessagePreview: content.trim().slice(0, 120) },
     });
+
+    // F3.5: fire-and-forget webhook
+    emit('message.sent', actor.tenantId, {
+      id: msg.id,
+      conversationId: conv.id,
+      contactId: conv.contactId,
+      content: msg.content,
+      type: msg.type,
+      senderType: 'USER',
+      createdAt: msg.createdAt,
+    }).catch(() => {});
+
     return msg;
   } catch (err) {
     logger.error({ err, conversationId }, 'falha ao enviar mensagem');

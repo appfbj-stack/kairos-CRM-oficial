@@ -1,6 +1,7 @@
 import { prisma } from '@kairos-crm/database';
 import { AppError, type AuthenticatedUser } from '@kairos-crm/shared';
 import type { CreateContactInput, UpdateContactInput } from './contacts.schema';
+import { emit } from '../../webhooks/dispatcher';
 
 export async function listContacts(actor: AuthenticatedUser, query: { search?: string; tag?: string; page: number; limit: number }) {
   if (!actor.tenantId) throw AppError.forbidden();
@@ -68,7 +69,7 @@ export async function createContact(actor: AuthenticatedUser, input: CreateConta
     }
   }
 
-  return prisma.contact.create({
+  const contact = await prisma.contact.create({
     data: {
       tenantId: actor.tenantId,
       name: input.name,
@@ -80,6 +81,19 @@ export async function createContact(actor: AuthenticatedUser, input: CreateConta
       source: input.source,
     },
   });
+
+  // F3.5: fire-and-forget webhook
+  emit('contact.created', actor.tenantId, {
+    id: contact.id,
+    name: contact.name,
+    phone: contact.phone,
+    email: contact.email,
+    tags: contact.tags,
+    source: contact.source,
+    createdAt: contact.createdAt,
+  }).catch(() => {}); // never block
+
+  return contact;
 }
 
 export async function updateContact(actor: AuthenticatedUser, id: string, input: UpdateContactInput) {

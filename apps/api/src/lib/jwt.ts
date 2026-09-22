@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { createSigner, createVerifier } from 'fast-jwt';
 import { env } from '../config/env';
+import { parseDurationToMs } from '@kairos-crm/shared';
 import type {
   AccessTokenPayload,
   RefreshTokenPayload,
@@ -57,19 +58,4 @@ export function generateRefreshToken(): { token: string; hash: string; jti: stri
 
 export function hashRefreshToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
-}
-
-function parseDurationToMs(d: string): number {
-  const match = d.match(/^(\d+)(ms|s|m|h|d)$/);
-  if (!match) return 7 * 24 * 60 * 60 * 1000;
-  const [, n, unit] = match;
-  const num = parseInt(n, 10);
-  switch (unit) {
-    case 'ms': return num;
-    case 's': return num * 1000;
-    case 'm': return num * 60 * 1000;
-    case 'h': return num * 60 * 60 * 1000;
-    case 'd': return num * 24 * 60 * 60 * 1000;
-    default: return 7 * 24 * 60 * 60 * 1000;
-  }
 }

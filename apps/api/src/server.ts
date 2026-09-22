@@ -5,7 +5,14 @@ import sensible from '@fastify/sensible';
 import { env } from './config/env';
 import { prisma } from '@kairos-crm/database';
 import { buildLoggerOptions, logger } from './lib/logger';
+import { registerWithAlias } from './lib/route-alias';
 import { authRoutes } from './modules/auth/auth.routes';
+import { externalHealthRoutes } from './modules/external/health.routes';
+import { externalAuthRoutes } from './modules/external/auth.routes';
+import { externalWebhookRoutes } from './modules/external/webhooks.routes';
+import { externalAIRoutes } from './modules/external/ai.routes';
+import { externalDocsRoutes } from './modules/external/docs.routes';
+import { startWebhookWorker } from './modules/webhooks/dispatcher';
 import { tenantRoutes } from './modules/tenants/tenants.routes';
 import { userRoutes } from './modules/users/users.routes';
 import { healthRoutes } from './modules/health/health.routes';
@@ -87,14 +94,23 @@ async function buildServer() {
   // Health
   await app.register(healthRoutes);
   // Aliases de health (pro frontend conseguir bater via /api/health)
-  app.get('/api/health', async () => ({ status: 'ok', service: 'kairos-crm-api', timestamp: new Date().toISOString() }));
-  app.get('/api/health/db', async (_req, reply) => {
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-      return { status: 'ok', database: 'ok' };
-    } catch (err) {
-      return reply.status(503).send({ status: 'degraded', database: 'error', error: (err as Error).message });
-    }
+  // F1.6: também registrados em /api/v1/internal/* (preparação para versionamento)
+  registerWithAlias(app, {
+    method: 'GET',
+    url: '/api/health',
+    handler: async () => ({ status: 'ok', service: 'kairos-crm-api', timestamp: new Date().toISOString() }),
+  });
+  registerWithAlias(app, {
+    method: 'GET',
+    url: '/api/health/db',
+    handler: async (_req, reply) => {
+      try {
+        await prisma.$queryRaw`SELECT 1`;
+        return { status: 'ok', database: 'ok' };
+      } catch (err) {
+        return reply.status(503).send({ status: 'degraded', database: 'error', error: (err as Error).message });
+      }
+    },
   });
 
   // /api/auth
@@ -148,6 +164,15 @@ async function buildServer() {
   // /api/notifications (sino + lista)
   await notificationRoutes(app);
 
+  // ====================================================================
+  // /api/v1/external/* — API externa (apps third-party, Fase 2)
+  // ====================================================================
+  await externalHealthRoutes(app);
+  await externalAuthRoutes(app);
+  await externalWebhookRoutes(app); // F3.4
+  await externalAIRoutes(app);     // F6.4
+  await externalDocsRoutes(app);    // F7.3
+
   // 404
   app.setNotFoundHandler((req, reply) => {
     reply.status(404).send({
@@ -172,6 +197,9 @@ async function start() {
       );
     }, 60_000);
     logger.info('📅 Scheduler de follow-ups iniciado (60s)');
+
+    // F3.6: webhook retry worker (a cada 30s)
+    startWebhookWorker(30_000);
   } catch (err) {
     logger.error({ err }, '❌ Falha ao iniciar servidor');
     process.exit(1);

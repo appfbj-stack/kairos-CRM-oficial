@@ -19,32 +19,17 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // =====================================================
-// Tenant context — setado por request no Fastify
-// para uso com Row Level Security (Fase 2+)
+// Tenant context — AsyncLocalStorage (Fase 1 refactor)
+// Resolve race condition do antigo currentTenantId global.
+// API compatível com versões anteriores.
 // =====================================================
 
-let currentTenantId: string | null = null;
-
-export function setTenantContext(tenantId: string | null) {
-  currentTenantId = tenantId;
-}
-
-export function getTenantContext(): string | null {
-  return currentTenantId;
-}
-
-export async function withTenantContext<T>(
-  tenantId: string | null,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const previous = currentTenantId;
-  setTenantContext(tenantId);
-  try {
-    return await fn();
-  } finally {
-    setTenantContext(previous);
-  }
-}
+export {
+  setTenantContext,
+  getTenantContext,
+  withTenantContext,
+  getTenantContextDebug,
+} from './context';
 
 // =====================================================
 // Re-exports
