@@ -103,16 +103,17 @@ await check('POST /auth/token sem headers → 400', async () => {
 });
 
 await check('POST /auth/token com HMAC fake → 401', async () => {
+  const fakeTs = Math.floor(Date.now() / 1000);
   const r = await fetch(`${baseUrl}/api/v1/external/auth/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Kairos-App-Id': '00000000-0000-0000-0000-000000000000',
       'X-Kairos-Key-Id': 'kairos_invalid',
-      'X-Kairos-Timestamp': String(Math.floor(Date.now() / 1000)),
-      'X-Kairos-Signature': 't=9999999999,v1=0000000000000000000000000000000000000000000000000000000000000000',
+      'X-Kairos-Timestamp': String(fakeTs),
+      'X-Kairos-Signature': `t=${fakeTs},v1=0000000000000000000000000000000000000000000000000000000000000000`,
     },
-    body: JSON.stringify({ keyId: 'kairos_invalid', timestamp: 9999999999 }),
+    body: JSON.stringify({ keyId: 'kairos_invalid', timestamp: fakeTs }),
   });
   return r.status === 401
     ? { ok: true, detail: 'rejeitou corretamente' }
