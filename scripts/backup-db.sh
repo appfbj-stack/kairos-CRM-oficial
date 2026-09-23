@@ -24,7 +24,7 @@ DB_SSLMODE="${DB_SSLMODE:-prefer}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/kairos-crm}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-BACKUP_FILE="${BACKUP_DIR}/kairos_crm_${TIMESTAMP}.sql.gz"
+BACKUP_FILE="${BACKUP_DIR}/${DB_NAME}_${TIMESTAMP}.sql.gz"
 LOCK_FILE="${BACKUP_DIR}/.backup.lock"
 LOG_PREFIX="[backup-db]"
 
@@ -105,7 +105,7 @@ log "success: ${BACKUP_FILE} (${SIZE_MB} MB in ${ELAPSED}s)"
 # -------- rotation --------
 log "rotating backups older than ${BACKUP_RETENTION_DAYS} days"
 DELETED=0
-find "$BACKUP_DIR" -maxdepth 1 -type f -name 'kairos_crm_*.sql.gz' -mtime +"$BACKUP_RETENTION_DAYS" -print -delete | while read -r f; do
+find "$BACKUP_DIR" -maxdepth 1 -type f -name "${DB_NAME}_*.sql.gz" -mtime +"$BACKUP_RETENTION_DAYS" -print -delete | while read -r f; do
   DELETED=$((DELETED + 1))
   log "deleted: $f"
   rm -f "${f}.sha256"
