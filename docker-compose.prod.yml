@@ -7,6 +7,8 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: kairos-crm-api
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:4040:4000"
     environment:
       NODE_ENV: production
       API_PORT: 4000
@@ -16,6 +18,7 @@ services:
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
       BCRYPT_ROUNDS: 12
+      KAIROS_API_MASTER_KEY: ${KAIROS_API_MASTER_KEY}
       WEB_ORIGIN: ${WEB_ORIGIN:-https://crm.fbautomacao.space}
       LOG_LEVEL: info
     networks:
@@ -27,9 +30,11 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: kairos-crm-web
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3060:3000"
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://kairos-crm-api:4000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://127.0.0.1:4040}
     networks:
       - dokploy-network
 
