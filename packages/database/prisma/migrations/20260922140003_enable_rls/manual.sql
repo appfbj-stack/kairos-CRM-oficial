@@ -1,64 +1,67 @@
 -- =====================================================
 -- Fase 9: Row Level Security (RLS) no Postgres
 -- Multi-tenant enforcement no BANCO — defesa em profundidade.
--- 
+--
 -- IMPORTANTE: esta migration é OPT-IN.
 --   - Por padrão: RLS fica HABILITADO mas BYPASSED (admin role tem BYPASSRLS).
 --   - Pra forçar enforcement: ALTER ROLE kairos_crm NOBYPASSRLS;
 --   - Pra reverter: ALTER ROLE kairos_crm BYPASSRLS;
 --   - Pra desabilitar policies: DROP POLICY ... (script no fim do arquivo)
--- 
+--
 -- Aplicar com: psql $DATABASE_URL -f manual.sql (dentro de transacao)
+--
+-- CORREÇÕES aplicadas na migração inicial (2026-09-23):
+--   1. current_tenant_id() retorna TEXT (não uuid) — todos os IDs são text gen_random_uuid()::text
+--   2. 4 tabelas (api_keys, webhook_endpoints, webhook_deliveries, application_audit_logs)
+--      não têm tenantId direto — policies usam EXISTS via applications
+--   3. refresh_tokens tem userId (não tenantId) — policy via users
+--   4. pipeline_stages tem pipelineId — policy via pipelines
+--   5. FORCE ROW LEVEL SECURITY aplicado em TODAS — sem isso, owner da tabela ignora RLS
+-- =====================================================
 
 -- =====================================================
 -- HELPER FUNCTION — le tenantId da sessao
 -- =====================================================
 
-CREATE OR REPLACE FUNCTION current_tenant_id() RETURNS uuid AS $$
-  SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid;
+CREATE OR REPLACE FUNCTION current_tenant_id() RETURNS text AS $$
+  SELECT NULLIF(current_setting('app.tenant_id', true), '');
 $$ LANGUAGE sql STABLE;
 
-COMMENT ON FUNCTION current_tenant_id() IS 'Retorna o tenantId da sessao atual, ou NULL se nao setado (bypass).';
+COMMENT ON FUNCTION current_tenant_id() IS 'Retorna o tenantId da sessao atual (text), ou NULL se nao setado (bypass).';
 
 -- =====================================================
 -- ENABLE RLS em todas as tabelas de negocio
+-- + FORCE ROW LEVEL SECURITY (sem isso, owner ignora)
 -- =====================================================
 
-ALTER TABLE "contacts" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "companies" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "leads" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "pipelines" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "pipeline_stages" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "tasks" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "products" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "services" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "whatsapp_accounts" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "conversations" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "messages" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "ai_configs" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "ai_messages" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "company_knowledge" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "followups" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "appointments" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "automations" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "access_tickets" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "notifications" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "refresh_tokens" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "applications" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "api_keys" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "auth_tokens" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "webhook_endpoints" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "webhook_deliveries" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "application_audit_logs" ENABLE ROW LEVEL SECURITY;
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public'
+      AND tablename IN (
+        'contacts','companies','leads','pipelines','pipeline_stages','tasks',
+        'products','services','whatsapp_accounts','conversations','messages',
+        'ai_configs','ai_messages','company_knowledge','followups','appointments',
+        'automations','access_tickets','notifications','refresh_tokens','audit_logs',
+        'applications','api_keys','auth_tokens','webhook_endpoints',
+        'webhook_deliveries','application_audit_logs'
+      )
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', r.tablename);
+    EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', r.tablename);
+  END LOOP;
+END
+$$;
 
 -- =====================================================
 -- POLICIES — FOR ALL usando current_tenant_id()
+-- Idempotente: DROP POLICY IF EXISTS antes de CREATE
 -- =====================================================
 
--- Idempotente: DROP POLICY IF EXISTS antes de CREATE
--- IMPORTANTE: tabelas SEM tenantId (ex: pipeline_stages) usam JOIN
-
+-- Tabelas COM tenantId direto (21 tabelas)
 DROP POLICY IF EXISTS "contacts_tenant_isolation" ON "contacts";
 CREATE POLICY "contacts_tenant_isolation" ON "contacts"
   FOR ALL
@@ -82,12 +85,6 @@ CREATE POLICY "pipelines_tenant_isolation" ON "pipelines"
   FOR ALL
   USING ("pipelines"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
   WITH CHECK ("pipelines"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
-
-DROP POLICY IF EXISTS "pipeline_stages_tenant_isolation" ON "pipeline_stages";
-CREATE POLICY "pipeline_stages_tenant_isolation" ON "pipeline_stages"
-  FOR ALL
-  USING ("pipeline_stages"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
-  WITH CHECK ("pipeline_stages"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
 
 DROP POLICY IF EXISTS "tasks_tenant_isolation" ON "tasks";
 CREATE POLICY "tasks_tenant_isolation" ON "tasks"
@@ -173,66 +170,156 @@ CREATE POLICY "notifications_tenant_isolation" ON "notifications"
   USING ("notifications"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
   WITH CHECK ("notifications"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
 
-DROP POLICY IF EXISTS "refresh_tokens_tenant_isolation" ON "refresh_tokens";
-CREATE POLICY "refresh_tokens_tenant_isolation" ON "refresh_tokens"
-  FOR ALL
-  USING ("refresh_tokens"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
-  WITH CHECK ("refresh_tokens"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
-
-DROP POLICY IF EXISTS "audit_logs_tenant_isolation" ON "audit_logs";
-CREATE POLICY "audit_logs_tenant_isolation" ON "audit_logs"
-  FOR ALL
-  USING ("audit_logs"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
-  WITH CHECK ("audit_logs"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
-
 DROP POLICY IF EXISTS "applications_tenant_isolation" ON "applications";
 CREATE POLICY "applications_tenant_isolation" ON "applications"
   FOR ALL
   USING ("applications"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
   WITH CHECK ("applications"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
 
-DROP POLICY IF EXISTS "api_keys_tenant_isolation" ON "api_keys";
-CREATE POLICY "api_keys_tenant_isolation" ON "api_keys"
-  FOR ALL
-  USING ("api_keys"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
-  WITH CHECK ("api_keys"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
+-- =====================================================
+-- POLICIES COM JOIN — tabelas SEM tenantId direto
+-- =====================================================
 
+-- refresh_tokens: via users
+DROP POLICY IF EXISTS "refresh_tokens_tenant_isolation" ON "refresh_tokens";
+CREATE POLICY "refresh_tokens_tenant_isolation" ON "refresh_tokens"
+  FOR ALL
+  USING (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM users u
+      WHERE u.id = "refresh_tokens"."userId"
+        AND u."tenantId" = current_tenant_id()
+    )
+  )
+  WITH CHECK (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM users u
+      WHERE u.id = "refresh_tokens"."userId"
+        AND u."tenantId" = current_tenant_id()
+    )
+  );
+
+-- auth_tokens: tem tenantId direto (denormalizado)
 DROP POLICY IF EXISTS "auth_tokens_tenant_isolation" ON "auth_tokens";
 CREATE POLICY "auth_tokens_tenant_isolation" ON "auth_tokens"
   FOR ALL
   USING ("auth_tokens"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
   WITH CHECK ("auth_tokens"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
 
+-- audit_logs: tem tenantId direto
+DROP POLICY IF EXISTS "audit_logs_tenant_isolation" ON "audit_logs";
+CREATE POLICY "audit_logs_tenant_isolation" ON "audit_logs"
+  FOR ALL
+  USING ("audit_logs"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
+  WITH CHECK ("audit_logs"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
+
+-- api_keys: via applications (só tem applicationId)
+DROP POLICY IF EXISTS "api_keys_tenant_isolation" ON "api_keys";
+CREATE POLICY "api_keys_tenant_isolation" ON "api_keys"
+  FOR ALL
+  USING (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM applications a
+      WHERE a.id = "api_keys"."applicationId"
+        AND a."tenantId" = current_tenant_id()
+    )
+  )
+  WITH CHECK (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM applications a
+      WHERE a.id = "api_keys"."applicationId"
+        AND a."tenantId" = current_tenant_id()
+    )
+  );
+
+-- webhook_endpoints: via applications (só tem applicationId)
 DROP POLICY IF EXISTS "webhook_endpoints_tenant_isolation" ON "webhook_endpoints";
 CREATE POLICY "webhook_endpoints_tenant_isolation" ON "webhook_endpoints"
   FOR ALL
-  USING ("webhook_endpoints"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
-  WITH CHECK ("webhook_endpoints"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
+  USING (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM applications a
+      WHERE a.id = "webhook_endpoints"."applicationId"
+        AND a."tenantId" = current_tenant_id()
+    )
+  )
+  WITH CHECK (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM applications a
+      WHERE a.id = "webhook_endpoints"."applicationId"
+        AND a."tenantId" = current_tenant_id()
+    )
+  );
 
+-- webhook_deliveries: via webhook_endpoints -> applications
 DROP POLICY IF EXISTS "webhook_deliveries_tenant_isolation" ON "webhook_deliveries";
 CREATE POLICY "webhook_deliveries_tenant_isolation" ON "webhook_deliveries"
   FOR ALL
-  USING ("webhook_deliveries"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
-  WITH CHECK ("webhook_deliveries"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
+  USING (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM webhook_endpoints we
+      JOIN applications a ON a.id = we."applicationId"
+      WHERE we.id = "webhook_deliveries"."endpointId"
+        AND a."tenantId" = current_tenant_id()
+    )
+  )
+  WITH CHECK (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM webhook_endpoints we
+      JOIN applications a ON a.id = we."applicationId"
+      WHERE we.id = "webhook_deliveries"."endpointId"
+        AND a."tenantId" = current_tenant_id()
+    )
+  );
 
+-- application_audit_logs: via applications
 DROP POLICY IF EXISTS "application_audit_logs_tenant_isolation" ON "application_audit_logs";
 CREATE POLICY "application_audit_logs_tenant_isolation" ON "application_audit_logs"
   FOR ALL
-  USING ("application_audit_logs"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL)
-  WITH CHECK ("application_audit_logs"."tenantId" = current_tenant_id() OR current_tenant_id() IS NULL);
+  USING (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM applications a
+      WHERE a.id = "application_audit_logs"."applicationId"
+        AND a."tenantId" = current_tenant_id()
+    )
+  )
+  WITH CHECK (
+    current_tenant_id() IS NULL OR
+    EXISTS (
+      SELECT 1 FROM applications a
+      WHERE a.id = "application_audit_logs"."applicationId"
+        AND a."tenantId" = current_tenant_id()
+    )
+  );
 
--- Special case: pipeline_stages NAO tem tenantId direto (pertence ao pipeline)
+-- pipeline_stages: via pipelines (não tem tenantId direto)
 DROP POLICY IF EXISTS "pipeline_stages_tenant_isolation" ON "pipeline_stages";
--- Policy via EXISTS no parent (pipeline.tenantId)
 CREATE POLICY "pipeline_stages_tenant_isolation" ON "pipeline_stages"
   FOR ALL
   USING (
     current_tenant_id() IS NULL OR
-    EXISTS (SELECT 1 FROM pipelines p WHERE p.id = "pipeline_stages"."pipelineId" AND p."tenantId" = current_tenant_id())
+    EXISTS (
+      SELECT 1 FROM pipelines p
+      WHERE p.id = "pipeline_stages"."pipelineId"
+        AND p."tenantId" = current_tenant_id()
+    )
   )
   WITH CHECK (
     current_tenant_id() IS NULL OR
-    EXISTS (SELECT 1 FROM pipelines p WHERE p.id = "pipeline_stages"."pipelineId" AND p."tenantId" = current_tenant_id())
+    EXISTS (
+      SELECT 1 FROM pipelines p
+      WHERE p.id = "pipeline_stages"."pipelineId"
+        AND p."tenantId" = current_tenant_id()
+    )
   );
 
 -- =====================================================
@@ -240,64 +327,26 @@ CREATE POLICY "pipeline_stages_tenant_isolation" ON "pipeline_stages"
 -- =====================================================
 -- (NAO executar junto — guardar pra emergencia)
 -- BEGIN;
--- ALTER TABLE "contacts" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "contacts_tenant_isolation" ON "contacts";
--- ALTER TABLE "companies" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "companies_tenant_isolation" ON "companies";
--- ALTER TABLE "leads" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "leads_tenant_isolation" ON "leads";
--- ALTER TABLE "pipelines" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "pipelines_tenant_isolation" ON "pipelines";
--- ALTER TABLE "pipeline_stages" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "pipeline_stages_tenant_isolation" ON "pipeline_stages";
--- ALTER TABLE "tasks" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "tasks_tenant_isolation" ON "tasks";
--- ALTER TABLE "products" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "products_tenant_isolation" ON "products";
--- ALTER TABLE "services" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "services_tenant_isolation" ON "services";
--- ALTER TABLE "whatsapp_accounts" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "whatsapp_accounts_tenant_isolation" ON "whatsapp_accounts";
--- ALTER TABLE "conversations" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "conversations_tenant_isolation" ON "conversations";
--- ALTER TABLE "messages" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "messages_tenant_isolation" ON "messages";
--- ALTER TABLE "ai_configs" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "ai_configs_tenant_isolation" ON "ai_configs";
--- ALTER TABLE "ai_messages" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "ai_messages_tenant_isolation" ON "ai_messages";
--- ALTER TABLE "company_knowledge" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "company_knowledge_tenant_isolation" ON "company_knowledge";
--- ALTER TABLE "followups" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "followups_tenant_isolation" ON "followups";
--- ALTER TABLE "appointments" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "appointments_tenant_isolation" ON "appointments";
--- ALTER TABLE "automations" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "automations_tenant_isolation" ON "automations";
--- ALTER TABLE "access_tickets" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "access_tickets_tenant_isolation" ON "access_tickets";
--- ALTER TABLE "notifications" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "notifications_tenant_isolation" ON "notifications";
--- ALTER TABLE "refresh_tokens" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "refresh_tokens_tenant_isolation" ON "refresh_tokens";
--- ALTER TABLE "audit_logs" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "audit_logs_tenant_isolation" ON "audit_logs";
--- ALTER TABLE "applications" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "applications_tenant_isolation" ON "applications";
--- ALTER TABLE "api_keys" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "api_keys_tenant_isolation" ON "api_keys";
--- ALTER TABLE "auth_tokens" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "auth_tokens_tenant_isolation" ON "auth_tokens";
--- ALTER TABLE "webhook_endpoints" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "webhook_endpoints_tenant_isolation" ON "webhook_endpoints";
--- ALTER TABLE "webhook_deliveries" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "webhook_deliveries_tenant_isolation" ON "webhook_deliveries";
--- ALTER TABLE "application_audit_logs" DISABLE ROW LEVEL SECURITY;
--- DROP POLICY IF EXISTS "application_audit_logs_tenant_isolation" ON "application_audit_logs";
+-- DO $$
+-- DECLARE r RECORD;
+-- BEGIN
+--   FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND rowsecurity=true LOOP
+--     EXECUTE format('ALTER TABLE public.%I DISABLE ROW LEVEL SECURITY', r.tablename);
+--     EXECUTE format('ALTER TABLE public.%I NO FORCE ROW LEVEL SECURITY', r.tablename);
+--     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.tablename || '_tenant_isolation', r.tablename);
+--   END LOOP;
+-- END
+-- $$;
+-- DROP FUNCTION IF EXISTS current_tenant_id();
 -- COMMIT;
 
 -- =====================================================
 -- ENFORCEMENT — pra forçar RLS (após validar que nada quebra)
 -- =====================================================
--- psql -c "ALTER ROLE kairos_crm NOBYPASSRLS;"   <- força RLS
+-- psql -c "ALTER ROLE kairos_crm NOBYPASSRLS;"   <- força RLS (sem bypass)
 -- psql -c "ALTER ROLE kairos_crm BYPASSRLS;"     <- volta a bypass
+-- IMPORTANTE: NOBYPASSRLS exige que TODA query Prisma faça
+--   SET LOCAL app.tenant_id = '<uuid>' antes — caso contrário,
+--   queries vão retornar ZERO rows (current_tenant_id IS NULL
+--   mas a policy tem IS NULL OR comparison, então sem SET
+--   vê TUDO; com NOBYPASSRLS + sem SET, vê NADA).
