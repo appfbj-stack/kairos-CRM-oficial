@@ -2,6 +2,35 @@
 
 Operational scripts for development, testing, and production maintenance.
 
+## `restore.sh`
+
+Restore a `kairos_crm_v2_db` backup to a fresh Postgres instance. Useful when migrating the DB to another server (VPS, Supabase, RDS, etc.).
+
+### Usage
+
+```bash
+NEW_DB_HOST=localhost NEW_DB_PORT=5432 \
+NEW_DB_USER=postgres NEW_DB_NAME=kairos_crm_v2_db \
+NEW_DB_PASSWORD=secret \
+BACKUP_FILE=/var/backups/kairos-crm/kairos_crm_v2_db_20261006T190514Z.sql.gz \
+bash scripts/restore.sh
+```
+
+The script creates the target DB (or recreates if it exists), restores the gzip-compressed SQL dump, and verifies row counts on core tables.
+
+### Finding the right BACKUP_FILE
+
+List existing backups on the source host:
+
+```bash
+ssh root@187.77.229.227 "ls -lh /var/backups/kairos-crm/"
+```
+
+Pick the most recent `kairos_crm_v2_db_*.sql.gz` and either:
+
+- `scp` it to the new host, or
+- use `BACKUP_FILE=https://...` with `curl ... | gunzip` if you uploaded to S3
+
 ## `backup-db.sh`
 
 Daily Postgres `pg_dump` with gzip compression, integrity verification, automatic rotation, and optional S3 upload.
