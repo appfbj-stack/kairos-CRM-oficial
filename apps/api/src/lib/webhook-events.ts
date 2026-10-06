@@ -24,6 +24,10 @@ export const WEBHOOK_EVENTS = [
   'contact.updated',
   'contact.archived',
 
+  'company.created',
+  'company.updated',
+  'company.archived',
+
   // WhatsApp / conversas
   'conversation.created',
   'conversation.closed',
@@ -67,7 +71,8 @@ export function isValidWebhookEvent(event: string): event is WebhookEvent {
  */
 export const EVENT_CATEGORIES = {
   crm: ['lead.created', 'lead.updated', 'lead.stage_changed', 'lead.won', 'lead.lost', 'lead.archived',
-       'contact.created', 'contact.updated', 'contact.archived'],
+       'contact.created', 'contact.updated', 'contact.archived',
+       'company.created', 'company.updated', 'company.archived'],
   conversation: ['conversation.created', 'conversation.closed', 'conversation.assigned',
                  'message.received', 'message.sent', 'message.processed'],
   scheduling: ['appointment.created', 'appointment.confirmed', 'appointment.cancelled',
