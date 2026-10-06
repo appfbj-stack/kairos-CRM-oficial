@@ -19,6 +19,7 @@ DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-kairos_crm_db}"
 DB_USER="${DB_USER:-kairos_crm}"
+DB_SUPERUSER="${DB_SUPERUSER:-postgres}"
 DB_SSLMODE="${DB_SSLMODE:-prefer}"
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/kairos-crm}"
@@ -62,14 +63,17 @@ if [ "${FREE_KB:-0}" -lt 204800 ]; then
 fi
 
 # -------- dump --------
-log "starting pg_dump (db=${DB_NAME} host=${DB_HOST}:${DB_PORT} user=${DB_USER})"
+log "starting pg_dump (db=${DB_NAME} host=${DB_HOST}:${DB_PORT} user=${DB_SUPERUSER} [bypasses RLS])"
 
 START_TIME="$(date +%s)"
 
+# Use DB_SUPERUSER (default: postgres) so RLS policies don't block COPY.
+# Required because kairos-crm has FORCE ROW LEVEL SECURITY on tenant tables,
+# which makes COPY fail with "query would be affected by row-level security policy".
 if ! pg_dump \
     --host="$DB_HOST" \
     --port="$DB_PORT" \
-    --username="$DB_USER" \
+    --username="$DB_SUPERUSER" \
     --dbname="$DB_NAME" \
     --no-owner \
     --no-privileges \
