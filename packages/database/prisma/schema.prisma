@@ -127,11 +127,14 @@ enum SenderType {
 
 enum LLMProvider {
   OPENAI
+  OPENROUTER
   GEMINI
   CLAUDE
   DEEPSEEK
   GLM
+  GROQ
   OLLAMA
+  MINIMAX
 }
 
 enum FollowUpStatus {
