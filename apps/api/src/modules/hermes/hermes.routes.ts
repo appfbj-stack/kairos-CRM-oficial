@@ -10,7 +10,7 @@ import { buildProvider } from './llm/factory';
 import * as service from './hermes.service';
 
 const aiConfigSchema = z.object({
-  provider: z.enum(['OPENAI', 'GEMINI', 'CLAUDE', 'DEEPSEEK', 'GLM', 'OLLAMA']).default('OPENAI'),
+  provider: z.enum(['OPENAI', 'GEMINI', 'CLAUDE', 'DEEPSEEK', 'GLM', 'OLLAMA', 'MINIMAX']).default('OPENAI'),
   model: z.string().min(1).max(80).optional(),
   apiKey: z.string().min(1).optional(),
   baseUrl: z.string().url().optional().nullable(),

@@ -2,6 +2,8 @@ import type { LLMProvider } from './types';
 import { OpenAICompatibleProvider, OPENAI_COMPAT_PRESETS } from './openai-compatible.adapter';
 import { OpenAIProvider } from './openai.adapter';
 import { AnthropicProvider } from './anthropic.adapter';
+import { GeminiProvider } from './gemini.adapter';
+import { MiniMaxProvider } from './minimax.adapter';
 
 export type LLMProviderId =
   | 'OPENAI'
@@ -11,7 +13,8 @@ export type LLMProviderId =
   | 'DEEPSEEK'
   | 'GLM'
   | 'GROQ'
-  | 'OLLAMA';
+  | 'OLLAMA'
+  | 'MINIMAX';
 
 export interface AIConfigSnapshot {
   provider: LLMProviderId;
@@ -31,7 +34,8 @@ export interface AIConfigSnapshot {
  *   - GROQ       → OpenAI-compatible
  *   - OLLAMA     → OpenAI-compatible (baseUrl custom)
  *   - CLAUDE     → AnthropicProvider (formato próprio)
- *   - GEMINI     → ⚠️ ainda não implementado (próxima iteração)
+ *   - GEMINI     → GeminiProvider (OpenAI-compat endpoint)
+ *   - MINIMAX    → MiniMaxProvider (OpenAI-compat, fallback api.minimax.chat)
  */
 export function buildProvider(cfg: AIConfigSnapshot): LLMProvider {
   if (!cfg.apiKey) {
@@ -69,11 +73,18 @@ export function buildProvider(cfg: AIConfigSnapshot): LLMProvider {
       });
 
     case 'GEMINI':
-      throw new Error(
-        'Provider GEMINI ainda não implementado. ' +
-        'Sugestão: use OpenRouter com modelo "google/gemini-2.0-flash-exp:free". ' +
-        'Gemini nativo será implementado em iteração futura.',
-      );
+      return new GeminiProvider({
+        apiKey: cfg.apiKey,
+        model: cfg.model || undefined,
+        baseUrl: cfg.baseUrl || undefined,
+      });
+
+    case 'MINIMAX':
+      return new MiniMaxProvider({
+        apiKey: cfg.apiKey,
+        model: cfg.model || undefined,
+        baseUrl: cfg.baseUrl || undefined,
+      });
 
     default:
       throw new Error(`Provider ${cfg.provider} não reconhecido`);
