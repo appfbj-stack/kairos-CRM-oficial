@@ -8,7 +8,7 @@ services:
     container_name: kairos-crm-api
     restart: unless-stopped
     ports:
-      - "127.0.0.1:4040:4000"
+      - "127.0.0.1:5040:4000"
     environment:
       NODE_ENV: production
       API_PORT: 4000
