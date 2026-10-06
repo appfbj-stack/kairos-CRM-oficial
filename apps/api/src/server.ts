@@ -22,6 +22,7 @@ import { pipelineRoutes } from './modules/crm/pipelines/pipelines.routes';
 import { taskRoutes } from './modules/crm/tasks/tasks.routes';
 import { productRoutes } from './modules/crm/products/products.routes';
 import { serviceRoutes } from './modules/crm/services/services.routes';
+import { companyRoutes } from './modules/crm/companies/companies.routes';
 import { whatsappRoutes } from './modules/whatsapp/whatsapp.routes';
 import { hermesRoutes } from './modules/hermes/hermes.routes';
 import { knowledgeRoutes } from './modules/knowledge/knowledge.routes';
@@ -139,6 +140,9 @@ async function buildServer() {
 
   // /api/crm/services
   await app.register(serviceRoutes, { prefix: '/api/crm/services' });
+
+  // /api/crm/companies
+  await app.register(companyRoutes, { prefix: '/api/crm/companies' });
 
   // /api/whatsapp/* + /api/inbox/* + webhook (rotas registradas no próprio module)
   await whatsappRoutes(app);
