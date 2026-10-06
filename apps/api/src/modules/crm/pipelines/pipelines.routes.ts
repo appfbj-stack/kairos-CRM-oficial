@@ -17,6 +17,11 @@ const createPipelineSchema = z.object({
   })).min(2).max(10),
 });
 
+const updatePipelineSchema = z.object({
+  name: z.string().min(2).max(60).optional(),
+  isDefault: z.boolean().optional(),
+});
+
 export async function pipelineRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
   app.addHook('preHandler', injectTenantContext);
@@ -47,6 +52,34 @@ export async function pipelineRoutes(app: FastifyInstance) {
         const user = (req as any).user;
         const input = createPipelineSchema.parse(req.body);
         return reply.status(201).send(await service.createPipeline(user, input));
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  app.patch<{ Params: { id: string } }>(
+    '/:id',
+    { preHandler: [requireRole('MANAGER', 'TENANT_ADMIN', 'SUPER_ADMIN')] },
+    async (req, reply) => {
+      try {
+        const user = (req as any).user;
+        const input = updatePipelineSchema.parse(req.body);
+        return reply.send(await service.updatePipeline(user, req.params.id, input));
+      } catch (err) {
+        return sendError(reply, err);
+      }
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/:id',
+    { preHandler: [requireRole('MANAGER', 'TENANT_ADMIN', 'SUPER_ADMIN')] },
+    async (req, reply) => {
+      try {
+        const user = (req as any).user;
+        await service.deletePipeline(user, req.params.id);
+        return reply.status(204).send();
       } catch (err) {
         return sendError(reply, err);
       }

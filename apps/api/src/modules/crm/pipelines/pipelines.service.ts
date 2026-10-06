@@ -53,6 +53,46 @@ export async function createPipeline(actor: AuthenticatedUser, input: { name: st
   });
 }
 
+export async function updatePipeline(
+  actor: AuthenticatedUser,
+  id: string,
+  input: { name?: string; isDefault?: boolean },
+) {
+  if (!actor.tenantId) throw AppError.forbidden();
+  const p = await prisma.pipeline.findFirst({ where: { id, tenantId: actor.tenantId } });
+  if (!p) throw AppError.notFound('Pipeline');
+
+  if (input.isDefault) {
+    await prisma.pipeline.updateMany({
+      where: { tenantId: actor.tenantId, isDefault: true, NOT: { id } },
+      data: { isDefault: false },
+    });
+  }
+
+  return prisma.pipeline.update({
+    where: { id },
+    data: {
+      ...(input.name !== undefined && { name: input.name }),
+      ...(input.isDefault !== undefined && { isDefault: input.isDefault }),
+    },
+    include: { stages: { orderBy: { position: 'asc' } } },
+  });
+}
+
+export async function deletePipeline(actor: AuthenticatedUser, id: string) {
+  if (!actor.tenantId) throw AppError.forbidden();
+  const p = await prisma.pipeline.findFirst({ where: { id, tenantId: actor.tenantId } });
+  if (!p) throw AppError.notFound('Pipeline');
+
+  // Bloqueia se tem leads associados
+  const leadCount = await prisma.lead.count({ where: { pipelineId: id, deletedAt: null } });
+  if (leadCount > 0) {
+    throw AppError.conflict(`Pipeline possui ${leadCount} leads. Mova ou delete os leads antes.`);
+  }
+
+  await prisma.pipeline.delete({ where: { id } });
+}
+
 export async function ensureDefaultPipeline(tenantId: string) {
   const existing = await prisma.pipeline.findFirst({
     where: { tenantId, isDefault: true },
